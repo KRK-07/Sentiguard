@@ -1,0 +1,67 @@
+MindTrackAI - TODO List
+========================
+
+🎯 CURRENT PRIORITIES:
+- [ ] Implement live updating for analysis section (currently only updates on click)
+- [ ] Add stopwatch/recording timer in main area when voice recording is active
+- [ ] Make analysis section update in real-time without manual refresh
+
+🚀 COMPLETED FEATURES:
+- [x] Google OAuth authentication
+- [x] Keylogger with sentiment analysis  
+- [x] Email alerts to guardian
+- [x] Voice recording with emotion detection (crying, laughter, sadness)
+- [x] GUI with sidebar navigation
+- [x] Settings integration into main area (no more popups)
+- [x] Homepage with quote and clickable title
+- [x] Privacy: auto-clear keystrokes on exit
+- [x] User settings auto-populated with Google email as guardian email
+- [x] Clean workspace (removed test files and extra docs)
+
+🔧 UI/UX IMPROVEMENTS:
+- [ ] Add visual feedback for voice recording (pulsing mic icon, timer)
+- [ ] Implement theme switching functionality (Light/Dark mode)
+- [ ] Add loading indicators for analysis updates
+- [ ] Improve responsive design for different screen sizes
+- [ ] Add tooltips for better user guidance
+
+📊 ANALYTICS & INSIGHTS:
+- [ ] Daily/weekly mood trend reports
+- [ ] Export mood data functionality
+- [ ] Statistical analysis and mood patterns
+- [ ] Customizable alert thresholds
+- [ ] Mood correlation with voice emotions
+
+🔒 PRIVACY & SECURITY:
+- [ ] Implement data encryption at rest
+- [ ] Add option to completely disable keylogging
+- [ ] Local-only processing confirmation
+- [ ] Data retention policy settings
+
+🎤 VOICE FEATURES:
+- [ ] Real-time voice emotion display during recording
+- [ ] Voice-to-text improvements
+- [ ] Multiple language support for voice analysis
+- [ ] Background noise filtering
+
+📱 ADVANCED FEATURES:
+- [ ] System tray integration
+- [ ] Scheduled mood check reminders
+- [ ] Integration with calendar for context
+- [ ] Machine learning model improvements
+- [ ] Offline mode capabilities
+
+🐛 BUG FIXES:
+- [ ] Handle edge cases in emotion detection
+- [ ] Improve error handling for voice recording failures
+- [ ] Memory optimization for long-running sessions
+
+💡 FUTURE IDEAS:
+- [ ] Mobile companion app
+- [ ] Team/workplace mood monitoring (with consent)
+- [ ] Integration with mental health resources
+- [ ] AI-powered mood improvement suggestions
+- [ ] Biometric integration (heart rate, etc.)
+
+========================
+Last Updated: August 6, 2025

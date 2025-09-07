@@ -1,0 +1,13 @@
+pynput>=1.7.7
+nltk>=3.8.1
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.131.0
+matplotlib>=3.8.0
+pillow>=10.3.0
+SpeechRecognition>=3.10.0
+librosa>=0.10.2
+numba>=0.60.0
+soundfile>=0.12.1
+numpy>=1.26.4
+scipy>=1.11.4
+requests>=2.31.0

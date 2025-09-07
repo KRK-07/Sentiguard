@@ -1,0 +1,14 @@
+﻿__pycache__/
+
+# Sensitive files containing user data
+keystrokes.txt
+alerts_log.json
+client_secret.json
+email_config.json
+user_settings.json
+
+# Virtual environment
+.venv/
+
+# Note: mood_history.json is not ignored as it contains only anonymized timestamps and scores
+
