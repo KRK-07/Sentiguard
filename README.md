@@ -19,7 +19,7 @@ Prerequisites
 
 1) Clone the repository
     ```powershell
-    git clone https://github.com/sannihith-madasu/SentiGuard.git
+    git clone https://github.com/KRK-07/SentiGuard.git
     cd SentiGuard
     ```
 
@@ -53,7 +53,7 @@ Prerequisites
 
 ## 👨💻 Authors
 
-Created by [Sannihith Madasu](https://github.com/sannihith-madasu)
+Created by [Sannihith Madasu](https://github.com/sannihith-madasu) [KR Keshav](https://github.com/KRK-07)
 
 ## 🚦 Usage
 
@@ -73,7 +73,6 @@ Data files (auto‑managed)
 - Keystrokes are saved locally and cleared automatically when the app closes.
 - No cloud storage; sentiment analysis happens on your device.
 - Pause/quit the app before typing sensitive information.
-- Never commit `client_secret.json` or your Gmail App Password.
 
 ## 🧰 Troubleshooting
 
