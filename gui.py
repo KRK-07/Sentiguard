@@ -13,6 +13,19 @@ from PIL import Image, ImageTk
 from voice_recorder import voice_recorder
 from enhanced_mood_bg import EnhancedMoodBackground
 
+# AI Companion Import (Optional - graceful fallback if not available)
+try:
+    from ai_companion import ai_companion, chat_with_ai, get_mood_suggestions
+    AI_AVAILABLE = True
+    print("✅ AI Companion loaded successfully")
+except ImportError as e:
+    AI_AVAILABLE = False
+    print(f"⚠️  AI Companion not available: {e}")
+    print("💡 AI chat will be disabled. Install OpenAI package for enhanced features.")
+except Exception as e:
+    AI_AVAILABLE = False
+    print(f"⚠️  AI Companion initialization error: {e}")
+
 def check_and_alert():
     try:
         with open("user_settings.json", "r") as f:
@@ -702,6 +715,346 @@ def launch_gui(user_info):
         # Update mood background when analysis is shown
         update_mood_background()
 
+    def show_ai_chat():
+        """Show AI Chat interface in main area"""
+        nonlocal current_view
+        clear_main_area()
+        current_view = "ai_chat"
+        
+        if not AI_AVAILABLE:
+            # Show AI unavailable message
+            unavailable_frame = tk.Frame(main_area, bg="#1e1e1e" if not is_light_mode else "#ffffff")
+            unavailable_frame.pack(expand=True, fill="both", padx=20, pady=20)
+            
+            title_label = tk.Label(
+                unavailable_frame,
+                text="🤖 AI Chat",
+                font=("Segoe UI", 24, "bold"),
+                bg="#1e1e1e" if not is_light_mode else "#ffffff",
+                fg="#2966e3"
+            )
+            title_label.pack(pady=(20, 20))
+            
+            info_text = (
+                "AI Chat is currently unavailable.\n\n"
+                "To enable AI-powered conversations:\n"
+                "1. Install required packages: pip install openai\n"
+                "2. Get an OpenAI API key from platform.openai.com\n"
+                "3. Set environment variable: OPENAI_API_KEY=your_key\n\n"
+                "The app will continue to work normally without AI chat."
+            )
+            
+            info_label = tk.Label(
+                unavailable_frame,
+                text=info_text,
+                font=("Segoe UI", 12),
+                bg="#1e1e1e" if not is_light_mode else "#ffffff",
+                fg="#cccccc" if not is_light_mode else "#666666",
+                justify="center"
+            )
+            info_label.pack(pady=20)
+            
+            return
+        
+        # Get current theme colors
+        if is_light_mode:
+            main_bg = "#ffffff"
+            main_fg = "#000000"
+            chat_bg = "#f8f9fa"
+            input_bg = "#ffffff"
+            input_fg = "#000000"
+            button_bg = "#2966e3"
+            user_msg_bg = "#2966e3"
+            ai_msg_bg = "#e9ecef"
+            ai_msg_fg = "#000000"
+        else:
+            main_bg = "#1e1e1e"
+            main_fg = "#cccccc"
+            chat_bg = "#2a2a2a"
+            input_bg = "#333333"
+            input_fg = "#ffffff"
+            button_bg = "#2966e3"
+            user_msg_bg = "#2966e3"
+            ai_msg_bg = "#3a3a3a"
+            ai_msg_fg = "#ffffff"
+        
+        # Title
+        title_label = tk.Label(
+            main_area,
+            text="🤖 AI Companion Chat",
+            font=("Segoe UI", 24, "bold"),
+            bg=main_bg,
+            fg="#2966e3"
+        )
+        title_label.pack(pady=(20, 10))
+        
+        # Subtitle
+        subtitle_label = tk.Label(
+            main_area,
+            text="Your empathetic AI companion is here to listen and support you 💙",
+            font=("Segoe UI", 12),
+            bg=main_bg,
+            fg=main_fg
+        )
+        subtitle_label.pack(pady=(0, 20))
+        
+        # Chat container
+        chat_container = tk.Frame(main_area, bg=main_bg)
+        chat_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        # Input area (pack first so it gets space)
+        input_frame = tk.Frame(chat_container, bg=main_bg)
+        input_frame.pack(side="bottom", fill="x", pady=(15, 0))
+        
+        # Chat display area with scrollbar
+        chat_frame = tk.Frame(chat_container, bg=chat_bg, relief="flat", bd=1)
+        chat_frame.pack(fill="both", expand=True)
+        
+        # Scrollable text widget for chat
+        chat_scrollbar = tk.Scrollbar(chat_frame)
+        chat_scrollbar.pack(side="right", fill="y")
+        
+        chat_display = tk.Text(
+            chat_frame,
+            bg=chat_bg,
+            fg=main_fg,
+            font=("Segoe UI", 11),
+            wrap="word",
+            yscrollcommand=chat_scrollbar.set,
+            state="disabled",
+            relief="flat",
+            bd=10,
+            padx=15,
+            pady=15
+        )
+        chat_display.pack(side="left", fill="both", expand=True)
+        chat_scrollbar.config(command=chat_display.yview)
+        
+        # Configure text tags for styling
+        chat_display.tag_configure("user", foreground="white", background=user_msg_bg, 
+                                   font=("Segoe UI", 11, "normal"), justify="right")
+        chat_display.tag_configure("ai", foreground=ai_msg_fg, background=ai_msg_bg,
+                                   font=("Segoe UI", 11, "normal"), justify="left")
+        chat_display.tag_configure("timestamp", foreground="#888888", font=("Segoe UI", 9))
+        chat_display.tag_configure("mood", foreground="#2966e3", font=("Segoe UI", 10, "italic"))
+        
+        # Current mood indicator
+        current_mood = get_latest_mood()
+        mood_text = f"Current mood: {current_mood:.2f}"
+        if current_mood >= 0.2:
+            mood_emoji = "😊"
+        elif current_mood <= -0.2:
+            mood_emoji = "😔" 
+        else:
+            mood_emoji = "😐"
+        
+        mood_label = tk.Label(
+            input_frame,
+            text=f"{mood_emoji} {mood_text}",
+            font=("Segoe UI", 10),
+            bg=main_bg,
+            fg="#2966e3"
+        )
+        mood_label.pack(anchor="w", pady=(0, 5))
+        
+        # Message input
+        input_row = tk.Frame(input_frame, bg=main_bg)
+        input_row.pack(fill="x")
+        
+        message_var = tk.StringVar()
+        message_entry = tk.Entry(
+            input_row,
+            textvariable=message_var,
+            font=("Segoe UI", 12),
+            bg=input_bg,
+            fg=input_fg,
+            relief="solid",
+            bd=2,
+            highlightthickness=1,
+            highlightcolor="#2966e3"
+        )
+        message_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        
+        # Add placeholder text
+        placeholder_text = "Type your message here..."
+        message_entry.insert(0, placeholder_text)
+        message_entry.config(fg="#888888")
+        
+        def on_entry_click(event):
+            if message_entry.get() == placeholder_text:
+                message_entry.delete(0, "end")
+                message_entry.config(fg=input_fg)
+        
+        def on_focus_out(event):
+            if message_entry.get() == "":
+                message_entry.insert(0, placeholder_text)
+                message_entry.config(fg="#888888")
+        
+        message_entry.bind('<FocusIn>', on_entry_click)
+        message_entry.bind('<FocusOut>', on_focus_out)
+        
+        # Send button
+        send_button = tk.Button(
+            input_row,
+            text="Send 💬",
+            font=("Segoe UI", 12, "bold"),
+            bg=button_bg,
+            fg="white",
+            relief="flat",
+            bd=0,
+            padx=20,
+            activebackground="#1e4d8b",
+            activeforeground="white"
+        )
+        send_button.pack(side="right")
+        
+        # Chat state
+        chat_state = {"processing": False}
+        
+        def add_message_to_chat(message, sender="user", show_mood=False):
+            """Add a message to the chat display"""
+            chat_display.config(state="normal")
+            
+            # Add timestamp
+            timestamp = datetime.datetime.now().strftime("%H:%M")
+            
+            if sender == "user":
+                # User message (right-aligned)
+                chat_display.insert("end", f"\n🙋‍♀️ You ({timestamp})\n", "timestamp")
+                
+                # Add mood info if requested
+                if show_mood:
+                    mood_info = f"Mood: {current_mood:.2f} "
+                    chat_display.insert("end", mood_info, "mood")
+                
+                chat_display.insert("end", f"{message}\n", "user")
+                
+            else:
+                # AI message (left-aligned) 
+                chat_display.insert("end", f"\n🤖 AI Companion ({timestamp})\n", "timestamp")
+                chat_display.insert("end", f"{message}\n", "ai")
+            
+            chat_display.insert("end", "\n")
+            chat_display.config(state="disabled")
+            
+            # Auto-scroll to bottom
+            chat_display.see("end")
+        
+        async def send_message():
+            """Send message to AI and display response"""
+            if chat_state["processing"]:
+                return
+                
+            message = message_var.get().strip()
+            if not message or message == placeholder_text:
+                return
+            
+            # Update UI state
+            chat_state["processing"] = True
+            send_button.config(text="Sending...", state="disabled")
+            message_entry.config(state="disabled")
+            
+            try:
+                # Add user message to chat
+                add_message_to_chat(message, sender="user", show_mood=True)
+                message_var.set("")  # Clear input
+                
+                # Get current mood for context
+                current_mood = get_latest_mood()
+                
+                # Determine mood trend (simplified)
+                history = get_day_analysis()
+                if len(history) >= 2:
+                    recent_scores = [score for _, score in history[-5:]]
+                    if len(recent_scores) >= 2:
+                        trend = "improving" if recent_scores[-1] > recent_scores[0] else "declining"
+                    else:
+                        trend = "stable"
+                else:
+                    trend = "stable"
+                
+                # Get AI response
+                response = await chat_with_ai(message, current_mood, trend)
+                
+                # Add AI response to chat
+                add_message_to_chat(response, sender="ai")
+                
+                # Get mood-based suggestions if mood is concerning
+                if current_mood < -0.3:
+                    suggestions = get_mood_suggestions(current_mood)
+                    if suggestions:
+                        suggestion_text = f"\n💡 Here are some gentle suggestions that might help:\n• {suggestions[0]}\n• {suggestions[1]}"
+                        add_message_to_chat(suggestion_text, sender="ai")
+                
+            except Exception as e:
+                error_msg = "I'm having trouble responding right now. Please try again in a moment."
+                add_message_to_chat(error_msg, sender="ai")
+                print(f"AI chat error: {e}")
+            
+            finally:
+                # Reset UI state
+                chat_state["processing"] = False
+                send_button.config(text="Send 💬", state="normal")
+                message_entry.config(state="normal")
+                message_entry.focus()
+        
+        def on_send_click():
+            """Handle send button click"""
+            import asyncio
+            
+            # Run async function in thread to avoid blocking GUI
+            def run_async():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(send_message())
+                finally:
+                    loop.close()
+            
+            threading.Thread(target=run_async, daemon=True).start()
+        
+        def on_enter_key(event):
+            """Handle Enter key press"""
+            if not chat_state["processing"]:
+                on_send_click()
+            return "break"  # Prevent default behavior
+        
+        # Bind events
+        send_button.config(command=on_send_click)
+        message_entry.bind("<Return>", on_enter_key)
+        
+        # Add welcome message
+        welcome_msg = (
+            "Hello! I'm your AI companion here to support you. 😊\n\n"
+            "I can see that your current mood is being monitored, and I'm here to listen "
+            "and provide gentle support based on how you're feeling.\n\n"
+            "Feel free to share what's on your mind, ask questions, or just say hello!"
+        )
+        add_message_to_chat(welcome_msg, sender="ai")
+        
+        # Focus on input
+        message_entry.focus()
+        
+        # Show proactive check-in if appropriate
+        recent_patterns = {
+            'mood_declining': current_mood < -0.3,
+            'stress_detected': current_mood < -0.4,
+            'improvement_noted': current_mood > 0.4
+        }
+        
+        # Add proactive message after a short delay
+        def add_proactive_message():
+            try:
+                if AI_AVAILABLE:
+                    from ai_companion import get_proactive_message
+                    proactive_msg = get_proactive_message(recent_patterns)
+                    if proactive_msg:
+                        root.after(2000, lambda: add_message_to_chat(proactive_msg, sender="ai"))
+            except:
+                pass
+        
+        root.after(1000, add_proactive_message)
+
     def show_guardian():
         check_and_add_guardian_alert()
         popup = tk.Toplevel()
@@ -1045,6 +1398,13 @@ def launch_gui(user_info):
     btn_analysis = create_sidebar_btn("Analysis", "\U0001F4C9")
     btn_analysis.config(command=show_analysis)
     btn_analysis.pack(fill="x", pady=5)
+
+    # AI Chat Button (with availability indicator)
+    ai_icon = "🤖" if AI_AVAILABLE else "🤖💤"
+    ai_text = "AI Chat" if AI_AVAILABLE else "AI Chat (Off)"
+    btn_ai_chat = create_sidebar_btn(ai_text, ai_icon)
+    btn_ai_chat.config(command=show_ai_chat)
+    btn_ai_chat.pack(fill="x", pady=5)
 
     # Voice Recording Button
     voice_btn_text = tk.StringVar(value="🎤 Start Voice")
