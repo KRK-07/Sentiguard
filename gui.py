@@ -220,11 +220,19 @@ def launch_gui(user_info):
         
         print(f"Theme applied: {'Light' if is_light_mode else 'Dark'} mode")
     
+    # Global reference for theme button updates
+    theme_button_updater = None
+    
     def toggle_to_light_mode():
         """Switch to light mode"""
-        nonlocal is_light_mode, current_view
+        nonlocal is_light_mode, current_view, theme_button_updater
         is_light_mode = True
         apply_theme()
+        
+        # Update theme buttons if they exist
+        if theme_button_updater:
+            root.after(10, theme_button_updater)
+        
         # Refresh current view to apply theme to graphs and settings
         if current_view == 'live_graph':
             show_live_graph()
@@ -235,9 +243,14 @@ def launch_gui(user_info):
     
     def toggle_to_dark_mode():
         """Switch to dark mode"""
-        nonlocal is_light_mode, current_view
+        nonlocal is_light_mode, current_view, theme_button_updater
         is_light_mode = False
         apply_theme()
+        
+        # Update theme buttons if they exist
+        if theme_button_updater:
+            root.after(10, theme_button_updater)
+        
         # Refresh current view to apply theme to graphs and settings
         if current_view == 'live_graph':
             show_live_graph()
@@ -1055,6 +1068,455 @@ def launch_gui(user_info):
         
         root.after(1000, add_proactive_message)
 
+    def show_personalized_insights():
+        """Show AI-powered personalized insights in main area"""
+        nonlocal current_view
+        clear_main_area()
+        current_view = "insights"
+        
+        # Get current theme colors
+        if is_light_mode:
+            bg_color = "#ffffff"
+            text_color = "#333333"
+            secondary_color = "#666666" 
+            card_bg = "#f8f9fa"
+            accent_color = "#2966e3"
+        else:
+            bg_color = "#1e1e1e"
+            text_color = "#ffffff"
+            secondary_color = "#cccccc"
+            card_bg = "#2d3748"
+            accent_color = "#4299e1"
+        
+        # Optimized container structure with minimal padding
+        insights_container = tk.Frame(main_area, bg=bg_color)
+        insights_container.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Compact header section
+        header_frame = tk.Frame(insights_container, bg=bg_color)
+        header_frame.pack(fill="x", pady=(5, 15))
+        
+        # Compact title
+        title_label = tk.Label(
+            header_frame,
+            text="🔮 AI Personalized Insights",
+            font=("Segoe UI", 22, "bold"),
+            bg=bg_color,
+            fg=accent_color
+        )
+        title_label.pack()
+        
+        # Compact subtitle
+        subtitle_label = tk.Label(
+            header_frame,
+            text="AI-powered analysis of your mental health patterns",
+            font=("Segoe UI", 11),
+            bg=bg_color,
+            fg=secondary_color,
+            wraplength=600
+        )
+        subtitle_label.pack(pady=(5, 0))
+        
+        # Improved responsive layout function
+        def update_responsive_layout():
+            try:
+                container_width = insights_container.winfo_width()
+                if container_width > 1:
+                    # More conservative font scaling
+                    if container_width < 500:
+                        title_label.configure(font=("Segoe UI", 18, "bold"))
+                        subtitle_label.configure(font=("Segoe UI", 10), wraplength=container_width - 50)
+                    elif container_width < 700:
+                        title_label.configure(font=("Segoe UI", 20, "bold"))
+                        subtitle_label.configure(font=("Segoe UI", 10), wraplength=container_width - 40)
+                    elif container_width < 1000:
+                        title_label.configure(font=("Segoe UI", 22, "bold"))
+                        subtitle_label.configure(font=("Segoe UI", 11), wraplength=600)
+                    else:
+                        title_label.configure(font=("Segoe UI", 24, "bold"))
+                        subtitle_label.configure(font=("Segoe UI", 11), wraplength=700)
+            except:
+                pass
+        
+        # Bind responsive updates with proper timing
+        insights_container.bind("<Configure>", lambda e: root.after(20, update_responsive_layout))
+        root.after(150, update_responsive_layout)
+        
+        # Compact loading indicator
+        loading_frame = tk.Frame(insights_container, bg=bg_color)
+        loading_frame.pack(fill="both", expand=True)
+        
+        # Center the loading content vertically and horizontally
+        loading_center = tk.Frame(loading_frame, bg=bg_color)
+        loading_center.pack(expand=True)
+        
+        loading_label = tk.Label(
+            loading_center,
+            text="🧠 Analyzing your patterns with AI...\nThis may take a moment.",
+            font=("Segoe UI", 14),
+            bg=bg_color,
+            fg=accent_color,
+            justify="center"
+        )
+        loading_label.pack(pady=(0, 10))
+        
+        # Compact progress indicator
+        progress_dots = tk.Label(
+            loading_center,
+            text="● ● ●",
+            font=("Segoe UI", 18),
+            bg=bg_color,
+            fg=secondary_color
+        )
+        progress_dots.pack()
+        
+        # Animate progress dots
+        def animate_progress():
+            current_text = progress_dots.cget("text")
+            if current_text == "● ● ●":
+                progress_dots.config(text="○ ● ●")
+            elif current_text == "○ ● ●":
+                progress_dots.config(text="● ○ ●")
+            elif current_text == "● ○ ●":
+                progress_dots.config(text="● ● ○")
+            else:
+                progress_dots.config(text="● ● ●")
+            
+            # Continue animation if still loading
+            if loading_frame.winfo_exists():
+                root.after(500, animate_progress)
+        
+        animate_progress()
+        
+        def load_insights_async():
+            """Load insights in background thread"""
+            import asyncio
+            from personalized_insights import get_personalized_insights
+            
+            async def get_insights():
+                try:
+                    insights_summary = await get_personalized_insights()
+                    root.after(0, lambda: display_insights(insights_summary))
+                except Exception as e:
+                    root.after(0, lambda: display_error(str(e)))
+            
+            # Run in new event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(get_insights())
+            finally:
+                loop.close()
+        
+        def display_insights(insights_summary):
+            """Display the generated insights"""
+            # Clear loading
+            loading_frame.destroy()
+            
+            if not insights_summary:
+                # Compact no data display
+                no_data_frame = tk.Frame(insights_container, bg=bg_color)
+                no_data_frame.pack(expand=True)
+                
+                no_data_icon = tk.Label(
+                    no_data_frame,
+                    text="📊",
+                    font=("Segoe UI", 48),
+                    bg=bg_color,
+                    fg=secondary_color
+                )
+                no_data_icon.pack(pady=(20, 15))
+                
+                no_data_label = tk.Label(
+                    no_data_frame,
+                    text="Not enough data for AI insights yet!\n\nKeep using Sentiguard to unlock personalized insights.",
+                    font=("Segoe UI", 12),
+                    bg=bg_color,
+                    fg=text_color,
+                    justify="center",
+                    wraplength=400
+                )
+                no_data_label.pack()
+                
+                return
+            
+            # Compact scrollable content area
+            content_container = tk.Frame(insights_container, bg=bg_color)
+            content_container.pack(fill="both", expand=True, pady=(5, 0))
+            
+            canvas = tk.Canvas(content_container, bg=bg_color, highlightthickness=0)
+            scrollbar = tk.Scrollbar(content_container, orient="vertical", command=canvas.yview)
+            
+            # Scrollable frame optimized for different window sizes
+            scrollable_frame = tk.Frame(canvas, bg=bg_color)
+            
+            def on_frame_configure(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+                # Center the content horizontally
+                canvas_width = canvas.winfo_width()
+                frame_width = scrollable_frame.winfo_reqwidth()
+                if canvas_width > frame_width:
+                    x_offset = (canvas_width - frame_width) // 2
+                else:
+                    x_offset = 0
+                canvas.coords("content_frame", x_offset, 0)
+            
+            scrollable_frame.bind("<Configure>", on_frame_configure)
+            
+            # Create window with centering capability
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", tags="content_frame")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Update canvas scroll region and centering on canvas resize
+            def on_canvas_configure(event):
+                on_frame_configure(None)
+            
+            canvas.bind("<Configure>", on_canvas_configure)
+            
+            # Adaptive content wrapper
+            content_wrapper = tk.Frame(scrollable_frame, bg=bg_color)
+            content_wrapper.pack(fill="x", padx=15)
+            
+            # Compact summary card
+            summary_card = tk.Frame(content_wrapper, bg=card_bg, relief="solid", bd=1)
+            summary_card.pack(fill="x", pady=(5, 15), ipady=3)
+            
+            summary_title = tk.Label(
+                summary_card,
+                text="💙 Your Personal Summary",
+                font=("Segoe UI", 15, "bold"),
+                bg=card_bg,
+                fg=accent_color
+            )
+            summary_title.pack(pady=(15, 8))
+            
+            summary_text = tk.Label(
+                summary_card,
+                text=insights_summary.personal_message,
+                font=("Segoe UI", 11),
+                bg=card_bg,
+                fg=text_color,
+                wraplength=600,
+                justify="left"
+            )
+            summary_text.pack(pady=(0, 15), padx=20)
+            
+            # Optimized responsive content function
+            def update_content_responsive():
+                try:
+                    container_width = insights_container.winfo_width()
+                    if container_width > 1:
+                        # More conservative sizing for better windowed mode
+                        if container_width < 500:
+                            wrap_length = container_width - 80
+                            title_font = ("Segoe UI", 13, "bold")
+                            text_font = ("Segoe UI", 10)
+                        elif container_width < 700:
+                            wrap_length = container_width - 100
+                            title_font = ("Segoe UI", 14, "bold")
+                            text_font = ("Segoe UI", 10)
+                        elif container_width < 900:
+                            wrap_length = 600
+                            title_font = ("Segoe UI", 15, "bold")
+                            text_font = ("Segoe UI", 11)
+                        else:
+                            wrap_length = 650
+                            title_font = ("Segoe UI", 15, "bold")
+                            text_font = ("Segoe UI", 11)
+                        
+                        # Update elements conservatively
+                        wrap_length = max(300, wrap_length)
+                        summary_title.configure(font=title_font)
+                        summary_text.configure(font=text_font, wraplength=wrap_length)
+                        
+                        # Update insight cards more conservatively
+                        for widget in content_wrapper.winfo_children():
+                            if isinstance(widget, tk.Frame) and widget.cget("relief") == "solid":
+                                for child in widget.winfo_children():
+                                    if isinstance(child, tk.Label):
+                                        current_wrap = child.cget("wraplength")
+                                        if current_wrap and current_wrap > 0:
+                                            child.configure(wraplength=wrap_length - 30)
+                except:
+                    pass
+            
+            # Optimized update timing
+            content_wrapper.bind("<Configure>", lambda e: root.after(30, update_content_responsive))
+            root.after(100, update_content_responsive)
+            
+            # Compact insights overview
+            overview_frame = tk.Frame(content_wrapper, bg=bg_color)
+            overview_frame.pack(fill="x", pady=(0, 10))
+            
+            stats_text = f"📈 {insights_summary.total_insights} insights • 🔥 {insights_summary.high_priority_count} high priority • 🎯 {insights_summary.main_theme}"
+            stats_label = tk.Label(
+                overview_frame,
+                text=stats_text,
+                font=("Segoe UI", 10),
+                bg=bg_color,
+                fg=secondary_color
+            )
+            stats_label.pack()
+            
+            # Compact individual insights
+            for i, insight in enumerate(insights_summary.insights, 1):
+                insight_card = tk.Frame(content_wrapper, bg=card_bg, relief="solid", bd=1)
+                insight_card.pack(fill="x", pady=6, ipady=2)
+                
+                # Header with title and priority
+                header_frame = tk.Frame(insight_card, bg=card_bg)
+                header_frame.pack(fill="x", pady=(10, 0))
+                
+                title_label = tk.Label(
+                    header_frame,
+                    text=insight.title,
+                    font=("Segoe UI", 12, "bold"),
+                    bg=card_bg,
+                    fg=accent_color
+                )
+                title_label.pack(side="left", padx=(12, 0))
+                
+                # Priority indicator
+                priority_colors = {1: "#dc3545", 2: "#fd7e14", 3: "#ffc107", 4: "#28a745", 5: "#6c757d"}
+                priority_texts = {1: "High", 2: "Med-High", 3: "Medium", 4: "Low", 5: "Info"}
+                
+                priority_label = tk.Label(
+                    header_frame,
+                    text=priority_texts.get(insight.priority, "Med"),
+                    font=("Segoe UI", 9, "bold"),
+                    bg=priority_colors.get(insight.priority, "#6c757d"),
+                    fg="white",
+                    padx=6,
+                    pady=2
+                )
+                priority_label.pack(side="right", padx=(0, 15))
+                
+                # Confidence indicator
+                confidence_frame = tk.Frame(insight_card, bg=card_bg)
+                confidence_frame.pack(fill="x", padx=15)
+                
+                confidence_label = tk.Label(
+                    confidence_frame,
+                    text=f"AI Confidence: {insight.confidence:.0%}",
+                    font=("Segoe UI", 9),
+                    bg=card_bg,
+                    fg=secondary_color
+                )
+                confidence_label.pack(side="left")
+                
+                # Compact main insight content
+                content_label = tk.Label(
+                    insight_card,
+                    text=insight.content,
+                    font=("Segoe UI", 10),
+                    bg=card_bg,
+                    fg=text_color,
+                    wraplength=600,
+                    justify="left"
+                )
+                content_label.pack(pady=10, padx=15, anchor="w")
+                
+                # Actionable steps (if available)
+                if insight.actionable_steps:
+                    actions_title = tk.Label(
+                        insight_card,
+                        text="💡 Actions:",
+                        font=("Segoe UI", 9, "bold"),
+                        bg=card_bg,
+                        fg=accent_color
+                    )
+                    actions_title.pack(anchor="w", padx=12, pady=(5, 3))
+                    
+                    for action in insight.actionable_steps:
+                        action_label = tk.Label(
+                            insight_card,
+                            text=f"• {action}",
+                            font=("Segoe UI", 9),
+                            bg=card_bg,
+                            fg=text_color,
+                            wraplength=550,
+                            justify="left"
+                        )
+                        action_label.pack(anchor="w", padx=25, pady=1)
+                
+                # Minimal bottom padding
+                tk.Frame(insight_card, bg=card_bg, height=5).pack()
+            
+            # Compact refresh button
+            refresh_frame = tk.Frame(content_wrapper, bg=bg_color)
+            refresh_frame.pack(fill="x", pady=20)
+            
+            refresh_button = tk.Button(
+                refresh_frame,
+                text="🔄 Refresh Insights",
+                font=("Segoe UI", 10, "bold"),
+                bg=accent_color,
+                fg="white",
+                relief="flat",
+                padx=20,
+                pady=8,
+                cursor="hand2",
+                activebackground="#1e5bb8" if not is_light_mode else "#1952cc",
+                activeforeground="white",
+                command=lambda: refresh_insights()
+            )
+            refresh_button.pack()
+            
+            # Add hover effects
+            def on_button_enter(e):
+                refresh_button.config(bg="#1e5bb8" if not is_light_mode else "#1952cc")
+            
+            def on_button_leave(e):
+                refresh_button.config(bg=accent_color)
+            
+            refresh_button.bind("<Enter>", on_button_enter)
+            refresh_button.bind("<Leave>", on_button_leave)
+            
+            # Pack scrollable components with proper layout
+            canvas.pack(side="left", fill="both", expand=True, padx=(0, 2))
+            scrollbar.pack(side="right", fill="y")
+            
+            # Enable mouse wheel scrolling
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def display_error(error_message):
+            """Display error message"""
+            loading_frame.destroy()
+            
+            error_container = tk.Frame(insights_container, bg=bg_color)
+            error_container.pack(fill="both", expand=True)
+            
+            error_frame = tk.Frame(error_container, bg=bg_color)
+            error_frame.pack(expand=True)
+            
+            error_icon = tk.Label(
+                error_frame,
+                text="⚠️",
+                font=("Segoe UI", 56),
+                bg=bg_color,
+                fg="#dc3545"
+            )
+            error_icon.pack(pady=20)
+            
+            error_label = tk.Label(
+                error_frame,
+                text=f"Error generating insights:\n{error_message}\n\nTry again in a moment.",
+                font=("Segoe UI", 12),
+                bg=bg_color,
+                fg=text_color,
+                justify="center"
+            )
+            error_label.pack(pady=10)
+        
+        def refresh_insights():
+            """Refresh insights by calling the function again"""
+            show_personalized_insights()
+        
+        # Start loading insights in background
+        threading.Thread(target=load_insights_async, daemon=True).start()
+
     def show_guardian():
         check_and_add_guardian_alert()
         popup = tk.Toplevel()
@@ -1216,21 +1678,85 @@ def launch_gui(user_info):
             theme_frame = tk.Frame(content_frame, bg=container_bg)
             theme_frame.pack(fill="x", pady=10)
 
+            # Create theme toggle buttons with proper state management
             btn_light = tk.Button(
-                theme_frame, text="Light Mode", bg="#f0f0f0", fg="#333",
+                theme_frame, text="Light Mode", 
                 font=("Segoe UI", 12, "bold"), bd=0, relief="flat", padx=30, pady=12,
-                activebackground="#2966e3", activeforeground="white",
-                command=toggle_to_light_mode
+                cursor="hand2"
             )
             btn_light.pack(side="left", padx=(0, 10))
 
             btn_dark = tk.Button(
-                theme_frame, text="Dark Mode", bg="#2966e3", fg="white",
+                theme_frame, text="Dark Mode",
                 font=("Segoe UI", 12, "bold"), bd=0, relief="flat", padx=30, pady=12,
-                activebackground="#2966e3", activeforeground="white",
-                command=toggle_to_dark_mode
+                cursor="hand2"
             )
             btn_dark.pack(side="left")
+            
+            # Function to update button states with smooth transitions
+            def update_theme_buttons():
+                if is_light_mode:
+                    # Light mode active
+                    btn_light.config(
+                        bg="#2966e3", fg="white",
+                        activebackground="#1e5bb8", activeforeground="white"
+                    )
+                    btn_dark.config(
+                        bg="#f0f0f0", fg="#333",
+                        activebackground="#e0e0e0", activeforeground="#333"
+                    )
+                else:
+                    # Dark mode active  
+                    btn_dark.config(
+                        bg="#2966e3", fg="white",
+                        activebackground="#1e5bb8", activeforeground="white"
+                    )
+                    btn_light.config(
+                        bg="#4a4a4a", fg="#ffffff",
+                        activebackground="#5a5a5a", activeforeground="#ffffff"
+                    )
+            
+            # Register this update function globally so other theme changes can call it
+            nonlocal theme_button_updater
+            theme_button_updater = update_theme_buttons
+            
+            # Enhanced toggle functions with button updates
+            def enhanced_toggle_to_light():
+                toggle_to_light_mode()
+                
+            def enhanced_toggle_to_dark():
+                toggle_to_dark_mode()
+            
+            # Bind enhanced functions
+            btn_light.config(command=enhanced_toggle_to_light)
+            btn_dark.config(command=enhanced_toggle_to_dark)
+            
+            # Add smooth hover effects
+            def on_light_enter(e):
+                if is_light_mode:
+                    btn_light.config(bg="#1e5bb8")
+                else:
+                    btn_light.config(bg="#5a5a5a")
+            
+            def on_light_leave(e):
+                update_theme_buttons()
+                
+            def on_dark_enter(e):
+                if not is_light_mode:
+                    btn_dark.config(bg="#1e5bb8") 
+                else:
+                    btn_dark.config(bg="#e0e0e0")
+            
+            def on_dark_leave(e):
+                update_theme_buttons()
+            
+            btn_light.bind("<Enter>", on_light_enter)
+            btn_light.bind("<Leave>", on_light_leave)
+            btn_dark.bind("<Enter>", on_dark_enter)
+            btn_dark.bind("<Leave>", on_dark_leave)
+            
+            # Initial button state setup
+            update_theme_buttons()
 
             # Privacy Settings
             tk.Label(
@@ -1405,6 +1931,11 @@ def launch_gui(user_info):
     btn_ai_chat = create_sidebar_btn(ai_text, ai_icon)
     btn_ai_chat.config(command=show_ai_chat)
     btn_ai_chat.pack(fill="x", pady=5)
+
+    # Personalized Insights Button
+    btn_insights = create_sidebar_btn("AI Insights", "🔮")
+    btn_insights.config(command=show_personalized_insights)
+    btn_insights.pack(fill="x", pady=5)
 
     # Voice Recording Button
     voice_btn_text = tk.StringVar(value="🎤 Start Voice")
