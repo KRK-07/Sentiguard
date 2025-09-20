@@ -1,0 +1,6 @@
+{
+    "from_addr": "sentiguard11@gmail.com",
+    "app_password": "zuujhfyhvogbhnaw",
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 465
+}

@@ -1,31 +1,16 @@
 ﻿__pycache__/
 
 # Sensitive files containing user data
-keystrokes.txt
-alerts_log.json
-client_secret.json
-email_config.json
-user_settings.json
+
 
 # Virtual environment
-.venv/
 
-# Test files and temporary files
-test_*.py
-*_test.py
-temp_*.py
-*_temp.py
+
 
 # Cache and temporary data files
 insights_cache.json
 *.cache
 *.tmp
-
-# Development documentation (keep README.md)
-*_SUMMARY.md
-*_FIX*.md
-todo.txt
-notes.txt
 
 # IDE and editor files
 .vscode/settings.json
@@ -43,4 +28,3 @@ ehthumbs.db
 Thumbs.db
 
 # Note: mood_history.json is not ignored as it contains only anonymized timestamps and scores
-
