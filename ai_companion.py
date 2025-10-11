@@ -18,10 +18,10 @@ class AIConfig:
     """Configuration for AI companion features"""
     
     # API Keys
-    GEMINI_API_KEY: Optional[str] = "AIzaSyB_5s78Rtt2Qfb233UeCyprQfl9eyo9mQA"
+    GEMINI_API_KEY: Optional[str] = "AIzaSyAPKupxMuuxpmw6Yk_DdMVAdkQ-cO3JDHQ"
     
     # Model Configuration
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     
     # Feature Flags
     ENABLE_GEMINI: bool = True
@@ -285,6 +285,16 @@ Respond as their caring AI companion who understands their current emotional sta
             ]
             return random.choice(responses)
             
+        # Language-related responses
+        if any(word in user_input_lower for word in ['language', 'languages', 'speak', 'multilingual', 'bilingual']):
+            responses = [
+                "I'm programmed primarily in English, but I can understand and discuss many languages! Are you multilingual yourself?",
+                "English is my main language, but I find languages fascinating! Do you speak multiple languages?",
+                "I work mainly in English, though I can discuss other languages. What languages are you interested in or do you speak?",
+                "English is my primary language. Are you asking because you're learning a new language or speak others?"
+            ]
+            return random.choice(responses)
+
         # Greeting responses
         if any(word in user_input_lower for word in ['hello', 'hi', 'hey', 'how are you']):
             responses = [
@@ -322,6 +332,16 @@ Respond as their caring AI companion who understands their current emotional sta
                 "Work can be stressful sometimes. What's been going on with your job?",
                 "Is everything okay with work? Want to talk about what's happening?",
                 "Work stuff can be tough to navigate. How are you handling everything?"
+            ]
+            return random.choice(responses)
+
+        # Knowledge/question responses
+        if any(phrase in user_input_lower for phrase in ['do you know', 'can you tell', 'tell me about', 'what is', 'what are']) or user_input_lower.startswith('tell me'):
+            responses = [
+                "That's an interesting question! I'd love to help you explore that. What specifically would you like to know?",
+                "Great question! While I might not have all the details, I'm here to chat about it. What's got you curious?",
+                "I appreciate your curiosity! Let's talk about that - what's making you interested in this topic?",
+                "That's something worth discussing! What's prompting this question? I'm here to explore it with you."
             ]
             return random.choice(responses)
             

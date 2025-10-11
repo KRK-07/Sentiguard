@@ -6,5 +6,6 @@
         "python": ".venv/Scripts/python.exe -u"
     },
     "code-runner.runInTerminal": true,
-    "code-runner.fileDirectoryAsCwd": true
+    "code-runner.fileDirectoryAsCwd": true,
+    "git.ignoreLimitWarning": true
 }

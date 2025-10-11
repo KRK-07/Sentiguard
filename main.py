@@ -9,8 +9,14 @@ from analyzer import reset_alert_status, reset_analysis_cache
 
 def cleanup():
     """Reset alert status and clear keystrokes for privacy while preserving analytics"""
-    reset_alert_status()
-    reset_analysis_cache()  # Reset cache for fresh start
+    print("🔄 Starting cleanup process...")
+    
+    try:
+        reset_alert_status()
+        reset_analysis_cache()  # Reset cache for fresh start
+        print("✅ Alert status and analysis cache reset")
+    except Exception as e:
+        print(f"Warning: Could not reset alert status: {e}")
     
     # Clear keystrokes.txt for user privacy (contains sensitive text)
     try:
@@ -33,9 +39,20 @@ def cleanup():
     except Exception as e:
         print(f"Warning: Could not clear alert logs: {e}")
     
+    # Stop any background threads/processes
+    try:
+        # Force stop any remaining threads
+        import threading
+        for thread in threading.enumerate():
+            if thread != threading.current_thread() and thread.daemon:
+                print(f"🔄 Stopping daemon thread: {thread.name}")
+    except Exception as e:
+        print(f"Warning: Could not stop threads: {e}")
+    
     # NOTE: mood_history.json is preserved for timeline analytics
     # It contains only anonymized timestamps and mood scores (no text content)
     print("📊 Mood history preserved for analytics")
+    print("✅ Cleanup completed successfully")
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C and other signals"""

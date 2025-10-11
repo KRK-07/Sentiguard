@@ -119,18 +119,21 @@ class PersonalizedInsightsEngine:
     
     def analyze_mood_patterns(self, mood_data: List[Dict]) -> Dict[str, Any]:
         """Analyze patterns in mood data for insight generation"""
-        if not mood_data:
+        # More flexible data requirements - need at least 5 data points instead of being too strict
+        if not mood_data or len(mood_data) < 5:
             return {'insufficient_data': True}
         
-        # Recent vs historical comparison
-        recent_entries = [entry for entry in mood_data if self._is_recent(entry.get('timestamp', ''), 7)]
-        historical_entries = [entry for entry in mood_data if not self._is_recent(entry.get('timestamp', ''), 7)]
+        # Recent vs historical comparison (look back 14 days instead of 7 for more data)
+        recent_entries = [entry for entry in mood_data if self._is_recent(entry.get('timestamp', ''), 14)]
+        historical_entries = [entry for entry in mood_data if not self._is_recent(entry.get('timestamp', ''), 14)]
         
         patterns = {}
         
-        # Basic statistics
-        if recent_entries:
-            recent_moods = [entry.get('mood_score', 0) for entry in recent_entries if 'mood_score' in entry]
+        # Basic statistics - use all available data if recent is insufficient
+        mood_entries_to_analyze = recent_entries if len(recent_entries) >= 3 else mood_data[-10:]  # Use last 10 if recent is too sparse
+        
+        if mood_entries_to_analyze:
+            recent_moods = [entry.get('mood_score', entry.get('score', 0)) for entry in mood_entries_to_analyze if 'mood_score' in entry or 'score' in entry]
             if recent_moods:
                 patterns['recent_average'] = statistics.mean(recent_moods)
                 patterns['recent_trend'] = self._calculate_trend(recent_moods)
@@ -330,14 +333,108 @@ class PersonalizedInsightsEngine:
         
         return days_tracked / possible_days if possible_days > 0 else 0.0
     
-    async def generate_llm_insights(self, patterns: Dict[str, Any], user_data: Dict[str, Any]) -> List[str]:
+    def generate_template_insights(self, patterns, user_data):
+        """
+        Generate insights using template patterns when LLM is unavailable
+        """
+        insights = []
+        
+        # Mood trend insight
+        avg_mood = patterns.get('average_mood', 0)
+        recent_scores = patterns.get('recent_scores', [])
+        
+        if len(recent_scores) >= 2:
+            recent_avg = sum(recent_scores[-3:]) / len(recent_scores[-3:])
+            older_avg = sum(recent_scores[:-3]) / max(1, len(recent_scores[:-3]))
+            
+            if recent_avg > older_avg + 0.1:
+                trend_text = "Your mood has been improving lately! You've shown an upward trend in the past few days. Keep up whatever positive changes you've been making."
+            elif recent_avg < older_avg - 0.1:
+                trend_text = "I notice your mood has been trending downward recently. This is completely normal - everyone has ups and downs. Consider focusing on self-care activities that usually help you feel better."
+            else:
+                trend_text = "Your mood has been relatively stable recently. Consistency in emotional well-being is a positive sign of emotional resilience."
+            
+            insights.append(PersonalizedInsight(
+                insight_type="trend_analysis",
+                title="📈 Mood Trend Analysis",
+                content=trend_text,
+                confidence=0.8,
+                priority=2,
+                actionable_steps=[
+                    "Continue monitoring your daily mood patterns",
+                    "Practice mindfulness to stay aware of emotional changes"
+                ],
+                data_sources=['mood_history'],
+                generated_at=datetime.now().isoformat()
+            ))
+        
+        # Emotional pattern insight
+        if avg_mood > 0.3:
+            pattern_text = "You tend to maintain a positive outlook! Your mood data shows you generally experience more positive emotions than negative ones. This optimistic pattern is associated with better mental health outcomes."
+            steps = [
+                "Continue engaging in activities that bring you joy",
+                "Share your positive energy with others"
+            ]
+        elif avg_mood < -0.3:
+            pattern_text = "Your mood data indicates you've been experiencing more challenging emotions lately. Remember that it's completely normal to go through difficult periods, and seeking support is a sign of strength."
+            steps = [
+                "Consider talking to someone you trust about how you're feeling",
+                "Engage in gentle self-care activities"
+            ]
+        else:
+            pattern_text = "Your emotional patterns show a balanced mix of different moods. This emotional variety is healthy and shows you're in touch with your feelings."
+            steps = [
+                "Continue being aware of your emotional states",
+                "Practice healthy coping strategies for difficult emotions"
+            ]
+        
+        insights.append(PersonalizedInsight(
+            insight_type="emotional_pattern",
+            title="🎭 Emotional Pattern Recognition",
+            content=pattern_text,
+            confidence=0.75,
+            priority=2,
+            actionable_steps=steps,
+            data_sources=['mood_history'],
+            generated_at=datetime.now().isoformat()
+        ))
+        
+        # Activity suggestion based on patterns
+        if patterns.get('needs_support', False) or avg_mood < -0.2:
+            activity_text = "Based on your recent mood patterns, here are some evidence-based activities that might help boost your emotional well-being: deep breathing exercises, gentle physical activity, connecting with supportive friends or family, or engaging in a hobby you enjoy."
+            steps = [
+                "Try a 5-minute mindfulness meditation",
+                "Take a short walk outdoors"
+            ]
+        else:
+            activity_text = "Your mood patterns suggest you're doing well emotionally! To maintain this positive state, consider continuing your current healthy habits and perhaps exploring new activities that challenge you in positive ways."
+            steps = [
+                "Write in a gratitude journal",
+                "Connect with someone who makes you feel good"
+            ]
+        
+        insights.append(PersonalizedInsight(
+            insight_type="activity_suggestion",
+            title="🎯 Personalized Activity Suggestions",
+            content=activity_text,
+            confidence=0.7,
+            priority=3,
+            actionable_steps=steps,
+            data_sources=['mood_history', 'keystroke_metadata'],
+            generated_at=datetime.now().isoformat()
+        ))
+        
+        return insights
+
+    async def generate_llm_insights(self, patterns, user_data):
         """Generate insights using LLM based on analyzed patterns"""
         
         # Import AI companion for LLM access
         try:
             from ai_companion import ai_companion
         except ImportError:
-            return ["AI companion not available for insight generation."]
+            print("AI companion not available for insight generation.")
+            return None  # Return None to trigger fallback
         
         insights = []
         
@@ -359,9 +456,13 @@ class PersonalizedInsightsEngine:
                             
             except Exception as e:
                 print(f"Error generating {prompt_type} insight: {e}")
+                # Check if this is a quota error
+                if "429" in str(e) or "quota" in str(e).lower():
+                    print("API quota exceeded - will use fallback insights")
+                    return None  # Trigger fallback system
                 continue
         
-        return insights[:5]  # Return top 5 insights
+        return insights[:5] if insights else None  # Return top 5 insights or None for fallback
     
     def _create_insight_prompts(self, patterns: Dict[str, Any], user_data: Dict[str, Any]) -> Dict[str, str]:
         """Create prompts for different types of insights"""
@@ -616,8 +717,12 @@ class PersonalizedInsightsEngine:
         if patterns.get('insufficient_data'):
             return None
         
-        # Generate LLM insights
+        # Generate LLM insights (with fallback for API limitations)
         llm_insights = await self.generate_llm_insights(patterns, user_data)
+        
+        # If LLM insights failed (e.g., API quota), generate template-based insights
+        if not llm_insights:
+            llm_insights = self.generate_template_insights(patterns, user_data)
         
         # Convert to PersonalizedInsight objects
         insights = []

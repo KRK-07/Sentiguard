@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """
 Enhanced Mood Background with Wave Effects
-Provides more sophisticated animations and effects
+Provides sophisticated animations and effects based on user mood
 """
 
 import tkinter as tk
 import math
 import random
 import time
-from mood_background import MoodBackground
+import threading
 
-class EnhancedMoodBackground(MoodBackground):
-    """Enhanced version with wave effects and better animations"""
+class EnhancedMoodBackground:
+    """Enhanced mood-responsive background with wave effects and particles"""
     
     def __init__(self, parent_widget):
-        super().__init__(parent_widget)
+        self.parent = parent_widget
+        self.canvas = None
+        self.animation_running = False
+        self.animation_thread = None
+        self.current_mood = "neutral"
         
         # Wave animation parameters
         self.wave_offset = 0
@@ -23,7 +27,123 @@ class EnhancedMoodBackground(MoodBackground):
         self.wave_speed = 0.05
         
         # Enhanced particle system
-        self.particle_count = 20  # Slightly fewer for better performance
+        self.particle_count = 20
+        self.particles = []
+        
+        # Define mood color palettes
+        self.mood_colors = {
+            "very_positive": {
+                "primary": (34, 139, 34),       # Forest Green
+                "secondary": (144, 238, 144),   # Light Green
+                "accent": (0, 128, 0),          # Green
+                "particle": (255, 255, 255)    # White
+            },
+            "positive": {
+                "primary": (50, 205, 50),       # Lime Green
+                "secondary": (152, 251, 152),   # Pale Green
+                "accent": (34, 139, 34),        # Forest Green
+                "particle": (255, 255, 255)    # White
+            },
+            "neutral": {
+                "primary": (105, 105, 105),     # Dim Gray
+                "secondary": (169, 169, 169),   # Dark Gray
+                "accent": (128, 128, 128),      # Gray
+                "particle": (211, 211, 211)    # Light Gray
+            },
+            "slightly_negative": {
+                "primary": (255, 99, 71),       # Tomato Red
+                "secondary": (255, 160, 122),   # Light Salmon
+                "accent": (220, 20, 60),        # Crimson
+                "particle": (255, 255, 255)    # White
+            },
+            "negative": {
+                "primary": (220, 20, 60),       # Crimson
+                "secondary": (255, 105, 180),   # Hot Pink
+                "accent": (178, 34, 34),        # Fire Brick
+                "particle": (255, 200, 200)    # Light Pink
+            },
+            "very_negative": {
+                "primary": (139, 0, 0),         # Dark Red
+                "secondary": (178, 34, 34),     # Fire Brick
+                "accent": (220, 20, 60),        # Crimson
+                "particle": (255, 182, 193)    # Light Pink
+            }
+        }
+        
+        self.setup_canvas()
+        self.create_enhanced_particles()
+        self.start_animation()
+    
+    def setup_canvas(self):
+        """Setup the background canvas"""
+        try:
+            self.canvas = tk.Canvas(
+                self.parent,
+                highlightthickness=0,
+                bd=0
+            )
+            self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+            self.canvas.lower()  # Send to back
+            
+        except Exception as e:
+            print(f"Error setting up mood background canvas: {e}")
+    
+    def categorize_mood(self, mood_score):
+        """Convert mood score to mood category"""
+        if mood_score >= 0.6:
+            return "very_positive"
+        elif mood_score >= 0.2:
+            return "positive"
+        elif mood_score >= -0.1:
+            return "neutral"
+        elif mood_score >= -0.4:
+            return "slightly_negative"
+        elif mood_score >= -0.7:
+            return "negative"
+        else:
+            return "very_negative"
+    
+    def update_mood(self, mood_score):
+        """Update background based on mood score"""
+        try:
+            new_mood = self.categorize_mood(mood_score)
+            if new_mood != self.current_mood:
+                self.current_mood = new_mood
+                self.redraw_background()
+                
+        except Exception as e:
+            print(f"Error updating mood background: {e}")
+    
+    def redraw_background(self):
+        """Redraw the entire background"""
+        try:
+            if not self.canvas:
+                return
+                
+            # Get canvas dimensions
+            self.canvas.update_idletasks()
+            width = self.canvas.winfo_width()
+            height = self.canvas.winfo_height()
+            
+            if width > 1 and height > 1:
+                colors = self.mood_colors[self.current_mood]
+                self.create_gradient(colors, width, height)
+                
+        except Exception as e:
+            print(f"Error redrawing background: {e}")
+    
+    def start_animation(self):
+        """Start the background animation"""
+        if not self.animation_running:
+            self.animation_running = True
+            self.animation_thread = threading.Thread(target=self._animation_loop, daemon=True)
+            self.animation_thread.start()
+    
+    def stop_animation(self):
+        """Stop the background animation"""
+        self.animation_running = False
+        if self.animation_thread:
+            self.animation_thread.join(timeout=1)
         self.create_enhanced_particles()
     
     def create_enhanced_particles(self):
@@ -79,16 +199,49 @@ class EnhancedMoodBackground(MoodBackground):
         try:
             # Clear canvas
             if self.canvas:
-                self.canvas.delete("background")  # type: ignore
+                self.canvas.delete("background")
             
             # Create base gradient
-            super().create_gradient(colors, width, height)
+            self._create_base_gradient(colors, width, height)
             
             # Add wave effects
             self.create_wave_effects(colors, width, height)
             
         except Exception as e:
             print(f"Error creating enhanced gradient: {e}")
+    
+    def _create_base_gradient(self, colors, width, height):
+        """Create the base gradient background"""
+        try:
+            if not self.canvas:
+                return
+                
+            primary = colors['primary']
+            secondary = colors['secondary']
+            
+            # Create vertical gradient
+            steps = 50
+            for i in range(steps):
+                y1 = int(height * i / steps)
+                y2 = int(height * (i + 1) / steps)
+                
+                # Interpolate between primary and secondary colors
+                ratio = i / (steps - 1)
+                r = int(primary[0] + (secondary[0] - primary[0]) * ratio)
+                g = int(primary[1] + (secondary[1] - primary[1]) * ratio)
+                b = int(primary[2] + (secondary[2] - primary[2]) * ratio)
+                
+                color = f"#{r:02x}{g:02x}{b:02x}"
+                
+                self.canvas.create_rectangle(
+                    0, y1, width, y2,
+                    fill=color,
+                    outline="",
+                    tags="background"
+                )
+                
+        except Exception as e:
+            print(f"Error creating base gradient: {e}")
     
     def create_wave_effects(self, colors, width, height):
         """Create flowing wave effects"""
@@ -119,7 +272,7 @@ class EnhancedMoodBackground(MoodBackground):
                 if len(wave_points) >= 6:
                     # Create filled polygon for wave
                     fill_color = self.blend_colors(colors['primary'], colors['secondary'], 0.5 + layer * 0.2)
-                    self.canvas.create_polygon(  # type: ignore
+                    self.canvas.create_polygon(
                         wave_points,
                         fill=fill_color,
                         outline="",
@@ -146,14 +299,14 @@ class EnhancedMoodBackground(MoodBackground):
             if not self.canvas:
                 return
                 
-            self.canvas.delete("particles")  # type: ignore
+            self.canvas.delete("particles")
             
             colors = self.mood_colors[self.current_mood]
             particle_color = colors['particle']
             
             # Get canvas dimensions
-            canvas_width = self.canvas.winfo_width()  # type: ignore
-            canvas_height = self.canvas.winfo_height()  # type: ignore
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
             
             if canvas_width <= 1 or canvas_height <= 1:
                 return
@@ -228,7 +381,7 @@ class EnhancedMoodBackground(MoodBackground):
                 
                 # Create particle with glow effect
                 glow_size = dynamic_size * 1.5
-                self.canvas.create_oval(  # type: ignore
+                self.canvas.create_oval(
                     particle['x'] - glow_size, particle['y'] - glow_size,
                     particle['x'] + glow_size, particle['y'] + glow_size,
                     fill=color,
@@ -237,7 +390,7 @@ class EnhancedMoodBackground(MoodBackground):
                     tags="particles"
                 )
                 
-                self.canvas.create_oval(  # type: ignore
+                self.canvas.create_oval(
                     particle['x'] - dynamic_size, particle['y'] - dynamic_size,
                     particle['x'] + dynamic_size, particle['y'] + dynamic_size,
                     fill=color,

@@ -260,14 +260,33 @@ def launch_gui(user_info):
             show_settings()
 
     def on_close():
-        print("Exiting SentiGuard...")
-        # Stop mood background animation
-        mood_bg.stop_animation()
-        mood_bg.destroy()
+        print("🔄 Exiting SentiGuard...")
         
-        # Stop voice recording if active
-        if voice_recorder.is_recording:
-            voice_recorder.stop_recording()
+        try:
+            # Stop mood background animation
+            if 'mood_bg' in locals() or 'mood_bg' in globals():
+                mood_bg.stop_animation()
+                mood_bg.destroy()
+                print("✅ Mood background stopped")
+        except Exception as e:
+            print(f"Warning: Could not stop mood background: {e}")
+        
+        try:
+            # Stop voice recording if active
+            if voice_recorder.is_recording:
+                voice_recorder.stop_recording()
+                print("✅ Voice recording stopped")
+        except Exception as e:
+            print(f"Warning: Could not stop voice recording: {e}")
+        
+        try:
+            # Stop AI companion animations
+            from ai_companion import ai_companion
+            if hasattr(ai_companion, 'animation_running'):
+                ai_companion.animation_running = False
+                print("✅ AI companion stopped")
+        except Exception as e:
+            print(f"Warning: Could not stop AI companion: {e}")
         
         # Clear keystrokes for user privacy
         try:
@@ -288,9 +307,26 @@ def launch_gui(user_info):
             print(f"Warning: Could not clear alert logs: {e}")
         
         # Reset alert status to 0 when app closes
-        reset_alert_status()
-        root.destroy()
-        sys.exit()
+        try:
+            reset_alert_status()
+            print("✅ Alert status reset")
+        except Exception as e:
+            print(f"Warning: Could not reset alert status: {e}")
+        
+        # Force stop all daemon threads
+        try:
+            import threading
+            for thread in threading.enumerate():
+                if thread != threading.current_thread() and thread.daemon:
+                    print(f"🔄 Waiting for daemon thread: {thread.name}")
+            print("✅ All threads handled")
+        except Exception as e:
+            print(f"Warning: Could not handle threads: {e}")
+        
+        print("✅ SentiGuard cleanup completed")
+        root.quit()  # Exit the mainloop
+        root.destroy()  # Destroy the window
+        sys.exit(0)  # Force exit
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     
