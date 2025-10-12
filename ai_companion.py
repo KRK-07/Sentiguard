@@ -12,13 +12,17 @@ from typing import Dict, List, Optional, Any, Union
 import threading
 from dataclasses import dataclass
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configuration class
 @dataclass
 class AIConfig:
     """Configuration for AI companion features"""
     
-    # API Keys
-    GEMINI_API_KEY: Optional[str] = "AIzaSyAPKupxMuuxpmw6Yk_DdMVAdkQ-cO3JDHQ"
+    # API Keys - loaded from environment variables for security
+    GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
     
     # Model Configuration
     GEMINI_MODEL: str = "gemini-2.5-flash"

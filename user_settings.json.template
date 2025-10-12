@@ -1,0 +1,8 @@
+{
+  "theme": "default",
+  "notifications": true,
+  "auto_analysis": true,
+  "privacy_mode": false,
+  "alert_threshold": -0.5,
+  "analysis_frequency": 5
+}

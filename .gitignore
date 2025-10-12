@@ -26,7 +26,6 @@ MANIFEST
 venv/
 ENV/
 env/
-.env
 
 # IDE
 .vscode/
@@ -44,10 +43,18 @@ insights_cache.json
 mood_history.json
 user_settings.json
 alert_status.json
-
-# SentiGuard specific - Sensitive files
-client_secret.json
 email_config.json
+
+# SentiGuard specific - Sensitive files (NEVER COMMIT THESE!)
+client_secret.json
+token.pickle
+token.json
+.env
+
+# Additional sensitive files
+concerning_analysis.json
+check_quota.py
+test_enhanced.py
 
 # OS
 .DS_Store

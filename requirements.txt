@@ -13,5 +13,8 @@ scipy>=1.11.4
 requests>=2.31.0
 pyaudio>=0.2.14
 
-# AI Companion Dependencies (Optional)
+# AI Companion Dependencies
 google-generativeai>=0.8.0
+
+# Environment Variables Support
+python-dotenv>=1.0.0
