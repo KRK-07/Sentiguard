@@ -24,8 +24,8 @@ class AIConfig:
     # API Keys - loaded from environment variables for security
     GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
     
-    # Model Configuration
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    # Model Configuration - Using 1.5-flash for better quota limits
+    GEMINI_MODEL: str = "gemini-1.5-flash"  # Changed from 2.5-flash due to quota issues
     
     # Feature Flags
     ENABLE_GEMINI: bool = True

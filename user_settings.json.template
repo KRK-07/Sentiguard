@@ -1,4 +1,7 @@
 {
+  "name": "User Name",
+  "google_id": "google_user_id",
+  "email": "user@gmail.com",
   "theme": "default",
   "notifications": true,
   "auto_analysis": true,

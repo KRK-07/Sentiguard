@@ -3,12 +3,16 @@ from email.mime.text import MIMEText
 import json
 import os
 
+# Get absolute path to the script directory to find config files
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def get_email_config():
     """Get email configuration from a config file or use defaults"""
-    config_file = "email_config.json"
+    config_file = os.path.join(SCRIPT_DIR, "email_config.json")
+    
     default_config = {
-        "from_addr": "sentiguard11@gmail.com",
-        "app_password": "zuujhfyhvogbhnaw",  # User needs to update this
+        "from_addr": "sentiguard11@gmail.com",  # SentiGuard's dedicated Gmail
+        "app_password": "YOUR_APP_PASSWORD_HERE",  # User needs to set this
         "smtp_server": "smtp.gmail.com",
         "smtp_port": 465
     }
@@ -34,6 +38,9 @@ def get_email_config():
 
 def send_alert_email(to_addr, count):
     config = get_email_config()
+    
+    print(f"[DEBUG] Email config loaded from: {os.path.join(SCRIPT_DIR, 'email_config.json')}")
+    print(f"[DEBUG] Current working directory: {os.getcwd()}")
     
     # Check if app password is still default
     if config["app_password"] == "YOUR_APP_PASSWORD_HERE":

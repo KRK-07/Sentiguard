@@ -44,6 +44,8 @@ mood_history.json
 user_settings.json
 alert_status.json
 email_config.json
+user_data/*
+!user_data/.gitkeep
 
 # SentiGuard specific - Sensitive files (NEVER COMMIT THESE!)
 client_secret.json
@@ -55,6 +57,12 @@ token.json
 concerning_analysis.json
 check_quota.py
 test_enhanced.py
+test_guardian_alert.py
+test_user_settings.py
+test_alert_popup.py
+test_sentiment.py
+performance_test.py
+debug_alert.py
 
 # OS
 .DS_Store

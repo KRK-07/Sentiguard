@@ -30,22 +30,31 @@ def check_and_alert():
     try:
         with open("user_settings.json", "r") as f:
             settings = json.load(f)
-        guardian_email = settings.get("guardian_email")
-        if not guardian_email:
+        user_email = settings.get("email")  # Changed from guardian_email to email
+        if not user_email:
+            print("⚠️ Alert check: No user email found in settings")
             return
 
         result = count_below_threshold()
         count, latest_line = result[0], result[1]
-        if count > ALERT_LIMIT:
-            send_alert_email(guardian_email, count)
+        print(f"🔍 Alert check: count={count}, limit={ALERT_LIMIT}, email={user_email}")
+        
+        if count >= ALERT_LIMIT:  # Changed from > to >=
+            print(f"⚠️ Triggering alert! Sending to {user_email}")
+            send_alert_email(user_email, count)
             # Set alert status to latest line to avoid re-checking same lines
             set_alert_status(latest_line)
             messagebox.showinfo(
-                "Guardian Alert Sent",
-                f"An alert was sent to the guardian ({guardian_email}) because mood dropped below {THRESHOLD} more than {ALERT_LIMIT} times."
+                "Alert Sent",
+                f"⚠️ Mood Alert!\n\n"
+                f"Your mood dropped below the threshold {count} times.\n\n"
+                f"An alert email has been sent to:\n{user_email}\n\n"
+                f"Please take care of yourself!"
             )
+        else:
+            print(f"🔍 Alert check: {count} negative entries (needs {ALERT_LIMIT})")
     except Exception as e:
-        print("Error during guardian alert check:", e)
+        print(f"Error during alert check: {e}")
         
         
 def check_and_add_guardian_alert(alert_limit=None):
@@ -62,11 +71,40 @@ def check_and_add_guardian_alert(alert_limit=None):
         neg_lines = []
     print(f"Debug: Alert check - Count: {count}, Limit: {alert_limit}, Latest line: {latest_line}")
     
-    if count > alert_limit:
+    if count >= alert_limit:  # Changed from > to >= so it triggers at exactly 5
+        # Get logged-in user's email from user settings
+        user_email = None
+        try:
+            with open("user_settings.json", "r") as f:
+                settings = json.load(f)
+            user_email = settings.get("email")  # Use the logged-in user's email
+        except Exception as e:
+            print(f"Warning: Could not load user email: {e}")
+        
+        # Send alert email to the logged-in user
+        if user_email:
+            try:
+                print(f"[DEBUG] Attempting to send email to: {user_email}")
+                email_sent = send_alert_email(user_email, count)
+                print(f"[DEBUG] Email send result: {email_sent}")
+                status = "Sent" if email_sent else "Failed"
+                if not email_sent:
+                    print("❌ send_alert_email returned False")
+            except Exception as e:
+                print(f"❌ Exception sending alert email: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                status = "Failed"
+        else:
+            print("⚠️ User email not found - alert not sent")
+            status = "Not Sent (No User Email)"
+        
+        # Log the alert
         alert_record = {
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "negative_count": count,
-            "status": "Sent",
+            "status": status,
+            "recipient_email": user_email if user_email else "Not configured",
             "reason_lines": neg_lines
         }
         logs = []
@@ -83,7 +121,28 @@ def check_and_add_guardian_alert(alert_limit=None):
             json.dump(logs, f, indent=2)
         # Set alert status to latest line to avoid re-checking same lines
         set_alert_status(latest_line)
-        print(f"✅ Alert logged: {count} negative entries detected")
+        
+        if user_email and status == "Sent":
+            print(f"✅ Alert sent to {user_email}: {count} negative entries detected")
+            # Show popup notification
+            messagebox.showinfo(
+                "Alert Sent",
+                f"⚠️ Mood Alert!\n\n"
+                f"Your mood dropped below the threshold {count} times.\n\n"
+                f"An alert email has been sent to:\n{user_email}\n\n"
+                f"Please take care of yourself! "
+            )
+        else:
+            print(f"⚠️ Alert logged but email not sent: {status}")
+            # Show warning popup
+            messagebox.showwarning(
+                "Alert Not Sent",
+                f"⚠️ Mood Alert Triggered\n\n"
+                f"Your mood dropped below threshold {count} times,\n"
+                f"but email could not be sent.\n\n"
+                f"Status: {status}\n\n"
+                f"Please configure your email in Settings."
+            )
         
 def initialize_user_settings(user_info):
     """Initialize or update user settings with Google auth info"""
@@ -94,18 +153,18 @@ def initialize_user_settings(user_info):
             print("Warning: No email found in user info")
             return
         
-        # Create user settings with Google user's email as guardian email
+        # Create user settings with logged-in user's email
         settings = {
             "name": user_info.get("name", "User"),
             "google_id": user_info.get("id", ""),
-            "guardian_email": user_email  # Use the logged-in user's email as guardian email
+            "email": user_email  # Store the logged-in user's email for alerts
         }
         
         # Save to user_settings.json
         with open("user_settings.json", "w") as f:
             json.dump(settings, f, indent=4)
         
-        print(f"✅ User settings updated - Guardian email set to: {user_email}")
+        print(f"✅ User settings updated - Alert email set to: {user_email}")
         
     except Exception as e:
         print(f"Error updating user settings: {e}")
@@ -116,9 +175,10 @@ def launch_gui(user_info):
     
     check_and_add_guardian_alert()
     root = tk.Tk()
-    root.title("SentiGuard")
-    root.geometry("900x600")
-    root.configure(bg="#1e1e1e")
+    root.title("SentiGuard - Mental Health Guardian")
+    root.geometry("1100x700")
+    root.configure(bg="#0f0f1e")
+    root.minsize(900, 600)
     
     # Global theme state
     is_light_mode = False
@@ -157,23 +217,23 @@ def launch_gui(user_info):
         nonlocal is_light_mode
         
         if is_light_mode:
-            # Light mode colors
-            bg_color = "#ffffff"
-            fg_color = "#000000"
-            sidebar_bg = "#f0f0f0"
-            topbar_bg = "#f0f0f0"
-            sidebar_fg = "#000000"
-            main_bg = "#ffffff"
-            accent_color = "#2966e3"
+            # Light mode colors - Modern & Clean
+            bg_color = "#f8f9fa"
+            fg_color = "#2c3e50"
+            sidebar_bg = "#ffffff"
+            topbar_bg = "#ffffff"
+            sidebar_fg = "#2c3e50"
+            main_bg = "#f8f9fa"
+            accent_color = "#667eea"
         else:
-            # Dark mode colors
-            bg_color = "#1e1e1e"
-            fg_color = "#cccccc"
-            sidebar_bg = "#111111"
-            topbar_bg = "#1e1e1e"
-            sidebar_fg = "white"
-            main_bg = "#1e1e1e"
-            accent_color = "#2966e3"
+            # Dark mode colors - Modern & Elegant
+            bg_color = "#0f0f1e"
+            fg_color = "#e0e6ed"
+            sidebar_bg = "#1a1a2e"
+            topbar_bg = "#16213e"
+            sidebar_fg = "#e0e6ed"
+            main_bg = "#0f0f1e"
+            accent_color = "#667eea"
         
         # Update root background
         root.configure(bg=bg_color)
@@ -337,31 +397,127 @@ def launch_gui(user_info):
     
     root.bind("<Configure>", on_window_resize)
 
-     # Top Bar
-    top_bar = tk.Frame(root, bg="#1e1e1e", height=50)
+     # Top Bar - Modern gradient style
+    top_bar = tk.Frame(root, bg="#16213e", height=60)
     top_bar.pack(side="top", fill="x")
+    
+    # App logo/title with modern styling
     title_label = tk.Label(
-        top_bar, text="SentiGuard", fg="#cccccc", bg="#1e1e1e",
-        font=("Segoe UI", 14, "bold")
+        top_bar, text="⚡ SentiGuard", fg="#667eea", bg="#16213e",
+        font=("Segoe UI", 18, "bold")
     )
-    title_label.pack(side="left", padx=20, pady=10)
+    title_label.pack(side="left", padx=25, pady=15)
     user_text = user_info if isinstance(user_info, str) else user_info["name"]
+    # Modern user badge
+    user_frame = tk.Frame(top_bar, bg="#667eea", relief="flat")
+    user_frame.pack(side="right", padx=20, pady=12)
     user_icon = tk.Label(
-        top_bar, text=f"\U0001F7E2 {user_text}", bg="#1e1e1e", fg="white", cursor="hand2"
+        user_frame, text=f"  👤 {user_text[:15]}  ", bg="#667eea", fg="white", 
+        cursor="hand2", font=("Segoe UI", 10, "bold")
     )
-    user_icon.pack(side="right", padx=10)
+    user_icon.pack(padx=12, pady=6)
+    
+    # Cloud sync status indicator - Modern badge style
+    sync_status_label = tk.Label(
+        top_bar, text="", bg="#16213e", fg="#a0aec0", font=("Segoe UI", 9)
+    )
+    sync_status_label.pack(side="right", padx=15)
+    
+    def update_sync_status():
+        """Update sync status indicator in real-time"""
+        try:
+            # Import here to avoid circular import
+            import sys
+            main_module = sys.modules.get('main')
+            sync_manager = main_module._sync_manager if main_module else None
+            
+            if sync_manager and sync_manager.is_online():
+                # Get last sync time for mood_history
+                last_sync = sync_manager.get_last_sync_time('mood_history')
+                
+                if last_sync:
+                    # Calculate time since last sync
+                    if isinstance(last_sync, str):
+                        # Parse ISO format timestamp
+                        last_sync_dt = datetime.datetime.fromisoformat(last_sync)
+                    else:
+                        last_sync_dt = last_sync
+                    
+                    time_diff = datetime.datetime.now() - last_sync_dt
+                    minutes_ago = int(time_diff.total_seconds() / 60)
+                    
+                    if minutes_ago < 1:
+                        time_str = "just now"
+                    elif minutes_ago < 60:
+                        time_str = f"{minutes_ago}m ago"
+                    else:
+                        hours_ago = minutes_ago // 60
+                        time_str = f"{hours_ago}h ago"
+                    
+                    sync_status_label.config(text=f"[CLOUD] Synced {time_str}", fg="#4CAF50")
+                else:
+                    sync_status_label.config(text="[CLOUD] Ready to sync", fg="#FFA500")
+            else:
+                sync_status_label.config(text="[OFFLINE]", fg="#888888")
+        except Exception as e:
+            sync_status_label.config(text="[OFFLINE]", fg="#888888")
+        
+        # Update every 30 seconds
+        root.after(30000, update_sync_status)
+    
+    # Start sync status updates
+    root.after(2000, update_sync_status)  # First update after 2 seconds
+    
     # settings_icon = tk.Label(top_bar, text="\u2699\ufe0f", bg="#1e1e1e", fg="white", cursor="hand2")
     # settings_icon.pack(side="right", padx=(0, 10))  # Removed duplicate settings icon
 
-    # Sidebar
-    sidebar = tk.Frame(root, bg="#111111", width=150)
+    # Sidebar - Modern elegant design
+    sidebar = tk.Frame(root, bg="#1a1a2e", width=200)
     sidebar.pack(side="left", fill="y")
+    sidebar.pack_propagate(False)
+    
+    # Sidebar header
+    sidebar_header = tk.Label(
+        sidebar, text="NAVIGATION", bg="#1a1a2e", fg="#667eea",
+        font=("Segoe UI", 10, "bold"), anchor="w"
+    )
+    sidebar_header.pack(fill="x", padx=20, pady=(20, 10))
+    
+    # Track active sidebar button
+    active_btn = None
+    
     def create_sidebar_btn(text, icon="\U0001F4CA"):
-        return tk.Button(
-            sidebar, text=f"{icon} {text}", bg="#111111", fg="white",
-            relief="flat", font=("Segoe UI", 10), anchor="w",
-            activebackground="#1e1e1e", activeforeground="cyan", padx=10
+        btn = tk.Button(
+            sidebar, text=f"{icon}  {text}", bg="#1a1a2e", fg="#e0e6ed",
+            relief="flat", font=("Segoe UI", 11), anchor="w",
+            activebackground="#667eea", activeforeground="white", 
+            padx=20, pady=15, cursor="hand2", bd=0
         )
+        
+        # Hover and active state effects
+        def on_enter(e):
+            if btn != active_btn:
+                btn['bg'] = "#2a2a3e"
+        
+        def on_leave(e):
+            if btn != active_btn:
+                btn['bg'] = "#1a1a2e"
+        
+        def set_active():
+            nonlocal active_btn
+            # Reset previous active button
+            if active_btn:
+                active_btn['bg'] = "#1a1a2e"
+                active_btn['fg'] = "#e0e6ed"
+            # Set new active button
+            btn['bg'] = "#667eea"
+            btn['fg'] = "white"
+            active_btn = btn
+        
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+        btn.set_active = set_active
+        return btn
 
     def clear_main_area():
         """Clear all widgets from main area"""
@@ -376,34 +532,66 @@ def launch_gui(user_info):
             widget.destroy()
     
     def show_homepage():
-        """Show the homepage with app name and quote"""
+        """Show the homepage with beautiful welcome screen"""
         clear_main_area()
         
+        # Welcome container
+        welcome_container = tk.Frame(main_area, bg="#0f0f1e")
+        welcome_container.pack(expand=True, fill="both")
+        
+        # Hero section
+        hero_frame = tk.Frame(welcome_container, bg="#0f0f1e")
+        hero_frame.pack(expand=True)
+        
+        # App name with gradient effect
         app_name_label = tk.Label(
-            main_area,
-            text="SentiGuard",
-            font=("Segoe UI", 36, "bold"),
-            bg="#1e1e1e",
-            fg="#2966e3",
+            hero_frame,
+            text="⚡ SentiGuard",
+            font=("Segoe UI", 48, "bold"),
+            bg="#0f0f1e",
+            fg="#667eea",
             cursor="hand2"
         )
-        app_name_label.pack(pady=(70, 10))
-        app_name_label.bind("<Button-1>", lambda e: show_homepage())  # Make clickable
+        app_name_label.pack(pady=(80, 5))
+        app_name_label.bind("<Button-1>", lambda e: show_homepage())
+        
+        # Subtitle
+        subtitle = tk.Label(
+            hero_frame,
+            text="Your AI-Powered Mental Health Guardian",
+            font=("Segoe UI", 16),
+            bg="#0f0f1e",
+            fg="#a0aec0"
+        )
+        subtitle.pack(pady=(0, 40))
+        
+        # Inspirational quote card
+        quote_card = tk.Frame(hero_frame, bg="#1a1a2e", relief="flat")
+        quote_card.pack(pady=20, padx=50)
         
         quote = (
-            '"The greatest weapon against stress is our ability to choose one thought over another."'
-            "\n– William James"
+            '"The greatest weapon against stress is our ability\n'
+            'to choose one thought over another."'
         )
         quote_label = tk.Label(
-            main_area,
+            quote_card,
             text=quote,
-            font=("Segoe UI", 15, "italic"),
-            bg="#1e1e1e",
-            fg="#ffaa00",
-            wraplength=650,
+            font=("Segoe UI", 16, "italic"),
+            bg="#1a1a2e",
+            fg="#ffd700",
+            wraplength=700,
             justify="center"
         )
-        quote_label.pack(pady=(8, 30))
+        quote_label.pack(pady=30, padx=40)
+        
+        author_label = tk.Label(
+            quote_card,
+            text="— William James",
+            font=("Segoe UI", 12),
+            bg="#1a1a2e",
+            fg="#a0aec0"
+        )
+        author_label.pack(pady=(0, 20))
 
     def show_live_graph():
         """Show live graph in main area with theme support"""
@@ -493,8 +681,8 @@ def launch_gui(user_info):
                 print(f"Error updating graph: {e}")
                 return []
 
-        # Reduce animation interval from 1000ms to 500ms for more responsiveness
-        current_animation = FuncAnimation(fig, animate, interval=500)
+        # Optimized animation interval (1000ms = 1 update/sec for better performance)
+        current_animation = FuncAnimation(fig, animate, interval=1000)
         canvas.draw()
 
     def show_analysis():
@@ -840,7 +1028,7 @@ def launch_gui(user_info):
         # Subtitle
         subtitle_label = tk.Label(
             main_area,
-            text="Your empathetic AI companion is here to listen and support you 💙",
+            text="Your empathetic AI companion is here to listen and support you ",
             font=("Segoe UI", 12),
             bg=main_bg,
             fg=main_fg
@@ -1319,7 +1507,7 @@ def launch_gui(user_info):
             
             summary_title = tk.Label(
                 summary_card,
-                text="💙 Your Personal Summary",
+                text=" Your Personal Summary",
                 font=("Segoe UI", 15, "bold"),
                 bg=card_bg,
                 fg=accent_color
@@ -1858,7 +2046,7 @@ def launch_gui(user_info):
                 ).pack(anchor="w", pady=3)
 
                 tk.Label(
-                    account_frame, text=f"Guardian Email: {settings.get('guardian_email', 'Not set')}", 
+                    account_frame, text=f"Alert Email: {settings.get('email', 'Not set')}", 
                     bg=container_bg, fg=container_fg, font=("Segoe UI", 12)
                 ).pack(anchor="w", pady=3)
 
@@ -1953,43 +2141,46 @@ def launch_gui(user_info):
         show_settings()
     # settings_icon.bind("<Button-1>", open_settings)  # Removed since settings_icon is removed
 
-    btn_live = create_sidebar_btn("Live Graph", "\U0001F4C8")
-    btn_live.config(command=show_live_graph)
+    # Create sidebar buttons with active state
+    btn_live = create_sidebar_btn("Live Graph", "📊")
+    btn_live.config(command=lambda: (btn_live.set_active(), show_live_graph()))
     btn_live.pack(fill="x", pady=(20, 5))
 
-    btn_analysis = create_sidebar_btn("Analysis", "\U0001F4C9")
-    btn_analysis.config(command=show_analysis)
+    btn_analysis = create_sidebar_btn("Analysis", "📈")
+    btn_analysis.config(command=lambda: (btn_analysis.set_active(), show_analysis()))
     btn_analysis.pack(fill="x", pady=5)
 
     # AI Chat Button (with availability indicator)
-    ai_icon = "🤖" if AI_AVAILABLE else "🤖💤"
-    ai_text = "AI Chat" if AI_AVAILABLE else "AI Chat (Off)"
+    ai_icon = "🤖" if AI_AVAILABLE else "🤖"
+    ai_text = "AI Chat" if AI_AVAILABLE else "AI Chat"
     btn_ai_chat = create_sidebar_btn(ai_text, ai_icon)
-    btn_ai_chat.config(command=show_ai_chat)
+    btn_ai_chat.config(command=lambda: (btn_ai_chat.set_active(), show_ai_chat()))
     btn_ai_chat.pack(fill="x", pady=5)
+    if not AI_AVAILABLE:
+        btn_ai_chat.config(fg="#666666")
 
     # Personalized Insights Button
-    btn_insights = create_sidebar_btn("AI Insights", "🔮")
-    btn_insights.config(command=show_personalized_insights)
+    btn_insights = create_sidebar_btn("AI Insights", "💡")
+    btn_insights.config(command=lambda: (btn_insights.set_active(), show_personalized_insights()))
     btn_insights.pack(fill="x", pady=5)
 
     # Voice Recording Button
-    voice_btn_text = tk.StringVar(value="🎤 Start Voice")
+    voice_btn_text = tk.StringVar(value=" Start Voice")
     voice_btn_color = tk.StringVar(value="#28a745")  # Green
     
     def toggle_voice_recording():
         try:
             if voice_recorder.is_recording:
                 # Stop recording
-                print("🛑 Stopping voice recording...")
+                print(" Stopping voice recording...")
                 voice_recorder.stop_recording()
-                voice_btn_text.set("🎤 Start Voice")
+                voice_btn_text.set(" Start Voice")
                 voice_btn_color.set("#28a745")  # Green
                 btn_voice.config(bg="#28a745", activebackground="#218838")
                 print("✅ Voice recording stopped")
                 
                 # Show confirmation message
-                messagebox.showinfo("Voice Recording", "🛑 Voice recording stopped successfully!")
+                messagebox.showinfo("Voice Recording", " Voice recording stopped successfully!")
                 
             else:
                 # Check if voice recorder is initialized
@@ -2005,10 +2196,10 @@ def launch_gui(user_info):
                     return
                 
                 # Start recording
-                print("🎙️ Starting voice recording...")
+                print(" Starting voice recording...")
                 success = voice_recorder.start_recording()
                 if success:
-                    voice_btn_text.set("⏹️ Stop Voice")
+                    voice_btn_text.set(" Stop Voice")
                     voice_btn_color.set("#dc3545")  # Red
                     btn_voice.config(bg="#dc3545", activebackground="#c82333")
                     print("✅ Voice recording started")
@@ -2016,7 +2207,7 @@ def launch_gui(user_info):
                     # Show confirmation message
                     messagebox.showinfo(
                         "Voice Recording", 
-                        "🎙️ Voice recording started!\n\n"
+                        " Voice recording started!\n\n"
                         "Speak clearly into your microphone.\n"
                         "Your speech will be analyzed for mood sentiment."
                     )
@@ -2030,22 +2221,27 @@ def launch_gui(user_info):
         except Exception as e:
             print(f"❌ Error in voice recording toggle: {e}")
             # Reset to default state on error
-            voice_btn_text.set("🎤 Start Voice")
+            voice_btn_text.set(" Start Voice")
             voice_btn_color.set("#28a745")
             btn_voice.config(bg="#28a745", activebackground="#218838")
             messagebox.showerror("Voice Recording Error", f"❌ An error occurred: {e}")
     
+    # Voice Recording Button - Special styling
     btn_voice = tk.Button(
-        sidebar, textvariable=voice_btn_text, bg="#28a745", fg="white",
-        relief="flat", font=("Segoe UI", 10, "bold"), 
-        activebackground="#218838", activeforeground="white",
-        command=toggle_voice_recording, padx=10, pady=8
+        sidebar, textvariable=voice_btn_text, bg="#10b981", fg="white",
+        relief="flat", font=("Segoe UI", 11, "bold"), 
+        activebackground="#059669", activeforeground="white",
+        command=toggle_voice_recording, padx=20, pady=12, cursor="hand2",
+        bd=0
     )
-    btn_voice.pack(fill="x", pady=5)
+    btn_voice.pack(fill="x", pady=10, padx=10)
+    
+    # Divider
+    tk.Frame(sidebar, bg="#667eea", height=2).pack(fill="x", pady=15, padx=20)
 
     # Settings Button
     btn_settings = create_sidebar_btn("Settings", "⚙️")
-    btn_settings.config(command=show_settings)
+    btn_settings.config(command=lambda: (btn_settings.set_active(), show_settings()))
     btn_settings.pack(fill="x", pady=5)
 
     # btn_guardian = create_sidebar_btn("Guardian", "\U0001F9D1\u200D\U0001F4BB")

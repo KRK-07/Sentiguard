@@ -15,17 +15,26 @@ enhanced_analyzer = EnhancedSentimentAnalyzer()
 KEYSTROKE_FILE = "keystrokes.txt"
 MOOD_HISTORY_FILE = "mood_history.json"  # New persistent mood history file
 
-THRESHOLD = -0.5  
+THRESHOLD = -0.3  # Matches the red dotted line on the graph
 ALERT_LIMIT = 5   
 
 ALERT_STATUS_FILE = "alert_status.json"
 
-# Enhanced sentiment analysis function - now uses context-aware analysis
+# Performance optimization: Sentiment result cache
+_sentiment_cache = {}
+_cache_max_size = 100  # Limit cache to 100 entries to save memory
+
+# Enhanced sentiment analysis function - now uses context-aware analysis with caching
 def analyze_sentiment(text):
-    """Enhanced sentiment analysis that handles context, sarcasm, and concerning phrases"""
+    """Enhanced sentiment analysis with caching for performance"""
     
     if not text or not text.strip():
         return 0.0
+    
+    # Check cache first to avoid redundant analysis
+    cache_key = text.strip().lower()[:100]  # Use first 100 chars as key
+    if cache_key in _sentiment_cache:
+        return _sentiment_cache[cache_key]
     
     # Use the enhanced analyzer for better context understanding
     detailed_result = enhanced_analyzer.analyze_context(text)
@@ -34,8 +43,18 @@ def analyze_sentiment(text):
     if detailed_result['needs_attention']:
         log_concerning_analysis(text, detailed_result)
     
-    # Return the context-adjusted score
-    return detailed_result['adjusted_compound']
+    # Cache the result (with size limit)
+    result = detailed_result['adjusted_compound']
+    if len(_sentiment_cache) < _cache_max_size:
+        _sentiment_cache[cache_key] = result
+    elif len(_sentiment_cache) >= _cache_max_size:
+        # Clear oldest 20% of cache when full
+        items = list(_sentiment_cache.items())
+        _sentiment_cache.clear()
+        _sentiment_cache.update(dict(items[-80:]))  # Keep newest 80%
+        _sentiment_cache[cache_key] = result
+    
+    return result
 
 def log_concerning_analysis(text, analysis_result):
     """Log concerning text analysis for review"""
@@ -187,14 +206,21 @@ def reset_alert_status():
             json.dump(status, f)
 
 def reset_analysis_cache():
-    """Reset the analysis cache - useful for testing or when file is cleared"""
-    global _analysis_cache, _last_file_size
+    """Reset the analysis cache and sentiment cache - useful for testing or when file is cleared"""
+    global _analysis_cache, _last_file_size, _sentiment_cache
     _analysis_cache = []
     _last_file_size = 0
+    _sentiment_cache.clear()  # Clear sentiment cache for memory optimization
 
 # Mood history management functions for persistent analytics
+# Performance: Use buffering to reduce disk writes
+_mood_buffer = []
+_mood_buffer_size = 10  # Write to disk every 10 entries
+
 def save_mood_to_history(score):
-    """Save mood score to persistent history file (privacy-safe)"""
+    """Save mood score to persistent history file with buffering for performance"""
+    global _mood_buffer
+    
     try:
         timestamp = datetime.now().isoformat()
         mood_entry = {
@@ -202,25 +228,46 @@ def save_mood_to_history(score):
             "score": score
         }
         
+        # Add to buffer
+        _mood_buffer.append(mood_entry)
+        
+        # Only write to disk when buffer is full (reduces I/O)
+        if len(_mood_buffer) >= _mood_buffer_size:
+            flush_mood_buffer()
+            
+    except Exception as e:
+        print(f"Warning: Could not save mood to history: {e}")
+
+def flush_mood_buffer():
+    """Flush mood buffer to disk"""
+    global _mood_buffer
+    
+    if not _mood_buffer:
+        return
+    
+    try:
         # Load existing history
         history = []
         if os.path.exists(MOOD_HISTORY_FILE):
             with open(MOOD_HISTORY_FILE, "r") as f:
                 history = json.load(f)
         
-        # Add new entry
-        history.append(mood_entry)
+        # Add buffered entries
+        history.extend(_mood_buffer)
         
-        # Keep only last 10000 entries to prevent file from growing too large
-        if len(history) > 10000:
-            history = history[-10000:]
+        # Keep only last 500 entries to save memory (reduced from 10000)
+        if len(history) > 500:
+            history = history[-500:]
         
         # Save updated history
         with open(MOOD_HISTORY_FILE, "w") as f:
             json.dump(history, f)
+        
+        # Clear buffer
+        _mood_buffer = []
             
     except Exception as e:
-        print(f"Warning: Could not save mood to history: {e}")
+        print(f"Warning: Could not flush mood buffer: {e}")
 
 def get_mood_history():
     """Get mood history from persistent file"""

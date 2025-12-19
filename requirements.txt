@@ -18,3 +18,11 @@ google-generativeai>=0.8.0
 
 # Environment Variables Support
 python-dotenv>=1.0.0
+
+# Cloud Sync Dependencies
+pymongo[srv]>=4.6.0  # MongoDB Atlas driver with DNS support
+cryptography>=42.0.0  # End-to-end encryption
+certifi>=2024.0.0  # SSL certificates for MongoDB
+
+# Performance Optimization (Optional but recommended)
+psutil>=5.9.0  # For system resource monitoring and process priority optimization
