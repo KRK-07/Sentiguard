@@ -1,16 +1,103 @@
 import os
 import json
 import re
-from datetime import datetime
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk
-nltk.download('vader_lexicon')
+from datetime import datetime, timedelta
+from collections import deque
+import statistics
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
-# Import our enhanced analyzer
-from enhanced_analyzer import EnhancedSentimentAnalyzer, analyze_sentiment_enhanced
+# Phase 2: spaCy for linguistic analysis
+try:
+    import spacy
+    nlp = spacy.load("en_core_web_sm")
+    SPACY_ENABLED = True
+except (ImportError, OSError):
+    print("⚠️ spaCy not available - some linguistic features disabled")
+    SPACY_ENABLED = False
+    nlp = None
 
-analyzer = SentimentIntensityAnalyzer()
+# Phase 3: Sentence Transformers for semantic understanding
+try:
+    from sentence_transformers import SentenceTransformer, util as st_util
+    print("Loading Sentence Transformer model...")
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    EMBEDDINGS_ENABLED = True
+    print("✅ Sentence Transformer loaded")
+except Exception as e:
+    print(f"⚠️ Sentence Transformers disabled: {e}")
+    EMBEDDINGS_ENABLED = False
+    embedding_model = None
+    st_util = None
+
+# Cardiff NLP RoBERTa Model
+print("Loading Cardiff NLP sentiment model...")
+try:
+    tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
+    model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
+    device = 0 if torch.cuda.is_available() else -1
+    cardiff_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=device)
+    print("✅ Cardiff NLP model loaded")
+    CARDIFF_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Cardiff NLP failed, using fallback: {e}")
+    CARDIFF_AVAILABLE = False
+    from nltk.sentiment.vader import SentimentIntensityAnalyzer
+    import nltk
+    nltk.download('vader_lexicon', quiet=True)
+    vader_analyzer = SentimentIntensityAnalyzer()
+
+# Import enhanced analyzer for backward compatibility
+from enhanced_analyzer import EnhancedSentimentAnalyzer
 enhanced_analyzer = EnhancedSentimentAnalyzer()
+
+# ============================================================================
+# GLOBAL STATE & CONFIGURATION
+# ============================================================================
+
+# Phase 1: Statistical Analysis State
+_sentiment_history = deque(maxlen=10)  # Rolling window for z-score
+PROFANITY_WORDS = {
+    'fuck', 'shit', 'damn', 'hell', 'ass', 'bitch', 'crap', 'piss',
+    'bastard', 'dick', 'cock', 'pussy', 'slut', 'whore', 'retard'
+}
+CIRCADIAN_FILE = os.path.join(os.path.dirname(__file__), 'circadian_baseline.json')
+
+# Phase 2: Linguistic Intelligence Vocabularies
+SARCASM_MARKERS = {
+    'oh great', 'yeah right', 'sure thing', 'totally', 'obviously', 
+    'clearly', 'brilliant', 'fantastic', 'wonderful', 'perfect',
+    'just perfect', 'love it', 'thanks a lot', 'just what i needed'
+}
+CRISIS_KEYWORDS = {
+    'suicide', 'kill myself', 'end it all', 'no point', 'better off dead',
+    'self harm', 'cut myself', 'want to die', 'give up', 'hopeless',
+    'worthless', 'hate myself', 'disappear forever'
+}
+VENTING_INDICATORS = {
+    'ugh', 'argh', 'gah', 'wtf', 'fml', 'smh', 'jfc', 'omfg',
+    'i swear', 'i cant', 'why does', 'every time', 'always happens'
+}
+
+# Phase 3: Semantic Understanding Vocabularies
+GAMING_VOCABULARY = [
+    'gg', 'glhf', 'ggwp', 'ez', 'rekt', 'pwned', 'noob', 'clutch',
+    'ace', 'headshot', 'respawn', 'loot', 'nerf', 'buff', 'op',
+    'camping', 'griefing', 'ganking', 'farming', 'speedrun',
+    'ragequit', 'tilted', 'carried', 'feeding', 'stomped'
+]
+MODERN_IDIOMS = {
+    'no cap': 0.3, 'fr fr': 0.2, 'lowkey': 0.0, 'highkey': 0.1,
+    'slaps': 0.8, 'hits different': 0.6, 'bussin': 0.9, 'mid': -0.3,
+    'its giving': 0.0, 'ate': 0.7, 'slay': 0.8, 'vibe check': 0.0,
+    'main character energy': 0.6, 'rent free': -0.2, 'understood the assignment': 0.8,
+    'touch grass': -0.4, 'chronically online': -0.3, 'unhinged': -0.2
+}
+
+# Phase 3: Semantic State
+_gaming_embeddings = {}
+_idiom_embeddings = {}
+_message_context_window = deque(maxlen=5)
 
 KEYSTROKE_FILE = "keystrokes.txt"
 MOOD_HISTORY_FILE = "mood_history.json"  # New persistent mood history file
@@ -24,9 +111,315 @@ ALERT_STATUS_FILE = "alert_status.json"
 _sentiment_cache = {}
 _cache_max_size = 100  # Limit cache to 100 entries to save memory
 
-# Enhanced sentiment analysis function - now uses context-aware analysis with caching
+# ============================================================================
+# PHASE 1: STATISTICAL ANALYSIS
+# ============================================================================
+
+def detect_profanity_shift(text):
+    """Compare sentiment with/without profanity to detect if profanity is genuine distress"""
+    text_lower = text.lower()
+    has_profanity = any(word in text_lower for word in PROFANITY_WORDS)
+    
+    if not has_profanity:
+        return 0.0  # No profanity, no adjustment
+    
+    # Remove profanity and compare sentiment
+    clean_text = text
+    for word in PROFANITY_WORDS:
+        clean_text = re.sub(r'\b' + word + r'\b', '', clean_text, flags=re.IGNORECASE)
+    
+    if not clean_text.strip():
+        return 0.0
+    
+    # Get base scores
+    if CARDIFF_AVAILABLE:
+        original_score = _cardiff_to_score(cardiff_pipeline(text[:512]))
+        clean_score = _cardiff_to_score(cardiff_pipeline(clean_text[:512]))
+    else:
+        original_score = vader_analyzer.polarity_scores(text)['compound']
+        clean_score = vader_analyzer.polarity_scores(clean_text)['compound']
+    
+    # If profanity removal improves sentiment significantly, it's genuine distress
+    delta = clean_score - original_score
+    if delta > 0.15:  # Profanity was masking negative sentiment
+        return -0.15
+    elif delta < -0.1:  # Profanity was expressing frustration, not genuine negativity
+        return 0.1
+    return 0.0
+
+def detect_statistical_anomaly(score):
+    """Z-score anomaly detection on rolling window"""
+    _sentiment_history.append(score)
+    
+    if len(_sentiment_history) < 3:
+        return False, 0.0  # Need minimum data
+    
+    mean = statistics.mean(_sentiment_history)
+    stdev = statistics.stdev(_sentiment_history)
+    
+    if stdev < 0.01:  # Avoid division by near-zero
+        return False, 0.0
+    
+    z_score = (score - mean) / stdev
+    
+    # Flag if score is > 2 standard deviations below mean
+    if z_score < -2.0:
+        return True, abs(z_score) * 0.05  # Downward adjustment
+    
+    return False, 0.0
+
+def load_circadian_profile():
+    """Load hourly baseline sentiment from file"""
+    if os.path.exists(CIRCADIAN_FILE):
+        try:
+            with open(CIRCADIAN_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    # Default baseline: neutral across all hours
+    return {str(h): 0.0 for h in range(24)}
+
+def update_circadian_profile(hour, score):
+    """Update hourly baseline with exponential moving average"""
+    profile = load_circadian_profile()
+    hour_key = str(hour)
+    
+    if hour_key in profile:
+        # Exponential moving average: new = 0.1 * current + 0.9 * old
+        profile[hour_key] = 0.1 * score + 0.9 * profile[hour_key]
+    else:
+        profile[hour_key] = score
+    
+    try:
+        with open(CIRCADIAN_FILE, 'w') as f:
+            json.dump(profile, f)
+    except:
+        pass
+
+def normalize_by_time(score):
+    """Adjust score based on circadian rhythm baseline"""
+    current_hour = datetime.now().hour
+    profile = load_circadian_profile()
+    baseline = profile.get(str(current_hour), 0.0)
+    
+    # Calculate deviation from baseline
+    deviation = score - baseline
+    normalized = score - (deviation * 0.2)  # Dampen by 20%
+    
+    # Update baseline in background
+    update_circadian_profile(current_hour, score)
+    
+    return normalized, baseline
+
+# ============================================================================
+# PHASE 2: LINGUISTIC INTELLIGENCE
+# ============================================================================
+
+def detect_sarcasm_markers(text):
+    """Detect sarcasm through linguistic patterns"""
+    text_lower = text.lower()
+    adjustment = 0.0
+    
+    # Check for sarcasm markers
+    for marker in SARCASM_MARKERS:
+        if marker in text_lower:
+            adjustment -= 0.15  # Invert sentiment
+    
+    if not SPACY_ENABLED:
+        return adjustment
+    
+    # spaCy analysis: Excessive positive adjectives with negative context
+    doc = nlp(text)
+    positive_adj_count = sum(1 for token in doc if token.pos_ == 'ADJ' and token.sentiment > 0)
+    
+    if positive_adj_count >= 3:
+        # Check for negative verbs nearby
+        has_negative_verb = any(token.pos_ == 'VERB' and token.sentiment < 0 for token in doc)
+        if has_negative_verb:
+            adjustment -= 0.2  # Likely sarcastic
+    
+    return adjustment
+
+def check_crisis_keywords(text):
+    """Flag high-risk crisis keywords"""
+    text_lower = text.lower()
+    found_keywords = []
+    
+    for keyword in CRISIS_KEYWORDS:
+        if keyword in text_lower:
+            found_keywords.append(keyword)
+    
+    if found_keywords:
+        return True, found_keywords
+    return False, []
+
+def detect_venting_pattern(text):
+    """Distinguish venting frustration from sustained distress"""
+    text_lower = text.lower()
+    
+    # Check for venting indicators
+    venting_count = sum(1 for indicator in VENTING_INDICATORS if indicator in text_lower)
+    
+    if venting_count == 0:
+        return False, 0.0
+    
+    if not SPACY_ENABLED:
+        # Simple heuristic: High profanity + venting indicators = temporary frustration
+        profanity_count = sum(1 for word in PROFANITY_WORDS if word in text_lower)
+        if profanity_count >= 2 and venting_count >= 1:
+            return True, 0.1  # Upward adjustment for venting
+        return False, 0.0
+    
+    # spaCy analysis: Short bursts vs sustained negativity
+    doc = nlp(text)
+    sentences = list(doc.sents)
+    
+    if len(sentences) <= 2:  # Short message = likely venting
+        if venting_count >= 1:
+            return True, 0.15
+    
+    return False, 0.0
+
+# ============================================================================
+# PHASE 3: SEMANTIC UNDERSTANDING
+# ============================================================================
+
+def initialize_phase3_embeddings():
+    """Pre-compute embeddings for gaming vocabulary and idioms"""
+    global _gaming_embeddings, _idiom_embeddings
+    
+    if not EMBEDDINGS_ENABLED:
+        return
+    
+    try:
+        # Gaming vocabulary embeddings
+        for phrase in GAMING_VOCABULARY:
+            _gaming_embeddings[phrase] = embedding_model.encode(phrase, convert_to_tensor=False)
+        
+        # Modern idiom embeddings
+        for idiom in MODERN_IDIOMS.keys():
+            _idiom_embeddings[idiom] = embedding_model.encode(idiom, convert_to_tensor=False)
+        
+        print(f"✅ Initialized embeddings: {len(_gaming_embeddings)} gaming + {len(_idiom_embeddings)} idioms")
+    except Exception as e:
+        print(f"⚠️ Embedding initialization failed: {e}")
+
+def detect_gaming_context(text):
+    """Detect gaming-related messages and adjust sentiment"""
+    if not EMBEDDINGS_ENABLED or not _gaming_embeddings:
+        # Fallback: Simple keyword matching
+        text_lower = text.lower()
+        matches = sum(1 for term in GAMING_VOCABULARY if term in text_lower)
+        if matches >= 2:
+            return 0.2  # Gaming is usually positive context
+        return 0.0
+    
+    try:
+        # Semantic similarity with gaming vocabulary
+        text_embedding = embedding_model.encode(text, convert_to_tensor=False)
+        
+        max_similarity = 0.0
+        for phrase, phrase_emb in _gaming_embeddings.items():
+            similarity = st_util.cos_sim(text_embedding, phrase_emb).item()
+            max_similarity = max(max_similarity, similarity)
+        
+        # Threshold for gaming context
+        if max_similarity > 0.65:
+            return 0.2  # Positive adjustment for gaming
+        elif max_similarity > 0.5:
+            return 0.1  # Slight positive adjustment
+        
+        return 0.0
+    except Exception as e:
+        return 0.0
+
+def detect_modern_idioms(text):
+    """Detect and interpret modern slang/idioms"""
+    text_lower = text.lower()
+    
+    if not EMBEDDINGS_ENABLED or not _idiom_embeddings:
+        # Fallback: Direct keyword matching
+        for idiom, sentiment_adj in MODERN_IDIOMS.items():
+            if idiom in text_lower:
+                return idiom, sentiment_adj
+        return None, 0.0
+    
+    try:
+        # Semantic similarity with idiom embeddings
+        text_embedding = embedding_model.encode(text, convert_to_tensor=False)
+        
+        best_match = None
+        best_similarity = 0.0
+        
+        for idiom, phrase_emb in _idiom_embeddings.items():
+            similarity = st_util.cos_sim(text_embedding, phrase_emb).item()
+            if similarity > best_similarity and similarity > 0.7:
+                best_similarity = similarity
+                best_match = idiom
+        
+        if best_match:
+            return best_match, MODERN_IDIOMS[best_match]
+        
+        return None, 0.0
+    except Exception as e:
+        return None, 0.0
+
+def analyze_with_context_window(text):
+    """Analyze sentiment with conversation context"""
+    _message_context_window.append(text)
+    
+    if len(_message_context_window) < 2:
+        return 0.0  # Need context for comparison
+    
+    if not EMBEDDINGS_ENABLED:
+        return 0.0
+    
+    try:
+        # Compare current message with previous messages
+        current_embedding = embedding_model.encode(text, convert_to_tensor=False)
+        
+        # Average similarity with previous messages
+        similarities = []
+        for prev_text in list(_message_context_window)[:-1]:  # Exclude current
+            prev_embedding = embedding_model.encode(prev_text, convert_to_tensor=False)
+            sim = st_util.cos_sim(current_embedding, prev_embedding).item()
+            similarities.append(sim)
+        
+        avg_similarity = statistics.mean(similarities)
+        
+        # High similarity = repetitive/ruminating thoughts (concerning)
+        if avg_similarity > 0.85:
+            return -0.1  # Downward adjustment for rumination
+        
+        return 0.0
+    except Exception as e:
+        return 0.0
+
+# Initialize Phase 3 embeddings on module load
+initialize_phase3_embeddings()
+
+def _cardiff_to_score(result):
+    """Convert Cardiff NLP output to -1 to +1 score"""
+    label = result[0]['label']
+    confidence = result[0]['score']
+    
+    if label == 'positive':
+        return confidence
+    elif label == 'negative':
+        return -confidence
+    else:  # neutral
+        return 0.0
+
+# Enhanced sentiment analysis function - now uses Cardiff NLP + All 3 Phases
 def analyze_sentiment(text):
-    """Enhanced sentiment analysis with caching for performance"""
+    """
+    Multi-phase sentiment analysis:
+    - Cardiff NLP RoBERTa (70% weight)
+    - Enhanced analyzer (30% weight)
+    - Phase 1: Statistical Analysis
+    - Phase 2: Linguistic Intelligence
+    - Phase 3: Semantic Understanding
+    """
     
     if not text or not text.strip():
         return 0.0
@@ -36,25 +429,73 @@ def analyze_sentiment(text):
     if cache_key in _sentiment_cache:
         return _sentiment_cache[cache_key]
     
-    # Use the enhanced analyzer for better context understanding
-    detailed_result = enhanced_analyzer.analyze_context(text)
+    try:
+        # ===== BASE SENTIMENT (Cardiff 70% + Enhanced 30%) =====
+        if CARDIFF_AVAILABLE:
+            cardiff_result = cardiff_pipeline(text[:512])  # Limit to 512 tokens
+            base_score = _cardiff_to_score(cardiff_result)
+        else:
+            vader_scores = vader_analyzer.polarity_scores(text)
+            base_score = vader_scores['compound']
+        
+        # Enhanced analyzer for context
+        detailed_result = enhanced_analyzer.analyze_context(text)
+        
+        # Weighted blend: Cardiff 70% + Enhanced 30%
+        blended_score = (base_score * 0.7) + (detailed_result['adjusted_compound'] * 0.3)
+        
+        # ===== PHASE 1: STATISTICAL ANALYSIS =====
+        profanity_adj = detect_profanity_shift(text)
+        is_anomaly, anomaly_adj = detect_statistical_anomaly(blended_score)
+        circadian_score, baseline = normalize_by_time(blended_score)
+        
+        # Apply Phase 1 adjustments
+        phase1_score = circadian_score + profanity_adj
+        if is_anomaly:
+            phase1_score -= anomaly_adj
+        
+        # ===== PHASE 2: LINGUISTIC INTELLIGENCE =====
+        sarcasm_adj = detect_sarcasm_markers(text)
+        is_crisis, crisis_words = check_crisis_keywords(text)
+        is_venting, venting_adj = detect_venting_pattern(text)
+        
+        # Apply Phase 2 adjustments
+        phase2_score = phase1_score + sarcasm_adj
+        if is_venting:
+            phase2_score += venting_adj
+        if is_crisis:
+            phase2_score = min(phase2_score, -0.7)  # Cap at high negativity
+            # Crisis flagging handled separately in detailed_result
+        
+        # ===== PHASE 3: SEMANTIC UNDERSTANDING =====
+        gaming_adj = detect_gaming_context(text)
+        idiom_match, idiom_adj = detect_modern_idioms(text)
+        context_adj = analyze_with_context_window(text)
+        
+        # Apply Phase 3 adjustments
+        final_score = phase2_score + gaming_adj + idiom_adj + context_adj
+        
+        # ===== BOUNDARY CLAMPING =====
+        final_score = max(-1.0, min(1.0, final_score))
+        
+        # Log concerning cases for monitoring
+        if detailed_result['needs_attention'] or is_crisis:
+            log_concerning_analysis(text, detailed_result)
+        
+        # Cache the result (with size limit)
+        if len(_sentiment_cache) < _cache_max_size:
+            _sentiment_cache[cache_key] = final_score
+        elif len(_sentiment_cache) >= _cache_max_size:
+            # Clear oldest 20% of cache when full
+            items = list(_sentiment_cache.items())
+            _sentiment_cache.clear()
+            _sentiment_cache.update(dict(items[-80:]))  # Keep newest 80%
+            _sentiment_cache[cache_key] = final_score
+    except Exception as e:
+        print(f"⚠️ Sentiment analysis error: {e}")
+        final_score = 0.0
     
-    # Log concerning cases for monitoring
-    if detailed_result['needs_attention']:
-        log_concerning_analysis(text, detailed_result)
-    
-    # Cache the result (with size limit)
-    result = detailed_result['adjusted_compound']
-    if len(_sentiment_cache) < _cache_max_size:
-        _sentiment_cache[cache_key] = result
-    elif len(_sentiment_cache) >= _cache_max_size:
-        # Clear oldest 20% of cache when full
-        items = list(_sentiment_cache.items())
-        _sentiment_cache.clear()
-        _sentiment_cache.update(dict(items[-80:]))  # Keep newest 80%
-        _sentiment_cache[cache_key] = result
-    
-    return result
+    return final_score
 
 def log_concerning_analysis(text, analysis_result):
     """Log concerning text analysis for review"""
