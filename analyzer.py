@@ -21,11 +21,18 @@ except (ImportError, OSError):
 try:
     from sentence_transformers import SentenceTransformer, util as st_util
     print("Loading Sentence Transformer model...")
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    # Try loading from local cache first (offline mode)
+    try:
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu', local_files_only=True)
+        print("✅ Sentence Transformer loaded (offline mode)")
+    except Exception:
+        # If not cached, try downloading (online mode)
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        print("✅ Sentence Transformer loaded (downloaded)")
     EMBEDDINGS_ENABLED = True
-    print("✅ Sentence Transformer loaded")
 except Exception as e:
-    print(f"⚠️ Sentence Transformers disabled: {e}")
+    print(f"⚠️ Sentence Transformers disabled (offline & not cached): {e}")
+    print("   App will work without semantic analysis features")
     EMBEDDINGS_ENABLED = False
     embedding_model = None
     st_util = None
@@ -33,18 +40,30 @@ except Exception as e:
 # Cardiff NLP RoBERTa Model
 print("Loading Cardiff NLP sentiment model...")
 try:
-    tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
-    model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
+    # Try loading from local cache first (offline mode)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest", local_files_only=True)
+        model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest", local_files_only=True)
+        print("✅ Cardiff NLP loaded (offline mode)")
+    except Exception:
+        # If not cached, try downloading (online mode)
+        tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
+        model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment-latest")
+        print("✅ Cardiff NLP loaded (downloaded)")
+    
     device = 0 if torch.cuda.is_available() else -1
     cardiff_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=device)
-    print("✅ Cardiff NLP model loaded")
     CARDIFF_AVAILABLE = True
 except Exception as e:
-    print(f"⚠️ Cardiff NLP failed, using fallback: {e}")
+    print(f"⚠️ Cardiff NLP not available (offline & not cached), using VADER fallback")
+    print("   App will work with reduced accuracy")
     CARDIFF_AVAILABLE = False
     from nltk.sentiment.vader import SentimentIntensityAnalyzer
     import nltk
-    nltk.download('vader_lexicon', quiet=True)
+    try:
+        nltk.download('vader_lexicon', quiet=True)
+    except Exception:
+        pass  # Continue even if download fails
     vader_analyzer = SentimentIntensityAnalyzer()
 
 # Import enhanced analyzer for backward compatibility

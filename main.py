@@ -230,8 +230,8 @@ def initialize_cloud_sync(user):
             print("   All features work normally, data saved locally")
     
     except Exception as e:
-        print(f"⚠️  Could not initialize cloud sync: {e}")
-        print("   Running in offline mode - all features work normally")
+        print(f"ℹ️  Cloud sync unavailable (offline mode)")
+        print("   All features work normally, data saved locally")
 
 if __name__ == "__main__":
     print("🚀 Starting SentiGuard (Optimized)...")
