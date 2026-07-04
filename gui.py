@@ -186,6 +186,7 @@ def launch_gui(user_info):
     current_animation = None
     # Track current view for theme refresh
     current_view = None
+    is_closing = False
     # Initialize mood background system
     mood_bg = EnhancedMoodBackground(root)
     
@@ -206,6 +207,8 @@ def launch_gui(user_info):
     
     def periodic_mood_update():
         """Periodically update mood background"""
+        if is_closing or not root.winfo_exists():
+            return
         update_mood_background()
         root.after(2000, periodic_mood_update)  # Update every 2 seconds for responsiveness
     
@@ -291,7 +294,8 @@ def launch_gui(user_info):
         
         # Update theme buttons if they exist
         if theme_button_updater:
-            root.after(10, theme_button_updater)
+            if root.winfo_exists():
+                root.after(10, theme_button_updater)
         
         # Refresh current view to apply theme to graphs and settings
         if current_view == 'live_graph':
@@ -309,7 +313,8 @@ def launch_gui(user_info):
         
         # Update theme buttons if they exist
         if theme_button_updater:
-            root.after(10, theme_button_updater)
+            if root.winfo_exists():
+                root.after(10, theme_button_updater)
         
         # Refresh current view to apply theme to graphs and settings
         if current_view == 'live_graph':
@@ -320,16 +325,32 @@ def launch_gui(user_info):
             show_settings()
 
     def on_close():
+        nonlocal is_closing
+        if is_closing:
+            return
+        is_closing = True
         print("🔄 Exiting SentiGuard...")
         
         try:
             # Stop mood background animation
             if 'mood_bg' in locals() or 'mood_bg' in globals():
                 mood_bg.stop_animation()
-                mood_bg.destroy()
+                if hasattr(mood_bg, "destroy"):
+                    mood_bg.destroy()
                 print("✅ Mood background stopped")
         except Exception as e:
             print(f"Warning: Could not stop mood background: {e}")
+
+        # Cancel pending Tk callbacks to prevent invalid command errors on shutdown.
+        try:
+            pending_after = root.tk.call("after", "info")
+            for job in root.tk.splitlist(pending_after):
+                try:
+                    root.after_cancel(job)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         
         try:
             # Stop voice recording if active
@@ -385,8 +406,8 @@ def launch_gui(user_info):
         
         print("✅ SentiGuard cleanup completed")
         root.quit()  # Exit the mainloop
-        root.destroy()  # Destroy the window
-        sys.exit(0)  # Force exit
+        if root.winfo_exists():
+            root.destroy()  # Destroy the window
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     
@@ -1396,6 +1417,11 @@ def launch_gui(user_info):
         
         # Animate progress dots
         def animate_progress():
+            if is_closing:
+                return
+            if not root.winfo_exists() or not loading_frame.winfo_exists() or not progress_dots.winfo_exists():
+                return
+
             current_text = progress_dots.cget("text")
             if current_text == "● ● ●":
                 progress_dots.config(text="○ ● ●")
@@ -1407,7 +1433,7 @@ def launch_gui(user_info):
                 progress_dots.config(text="● ● ●")
             
             # Continue animation if still loading
-            if loading_frame.winfo_exists():
+            if root.winfo_exists() and loading_frame.winfo_exists():
                 root.after(500, animate_progress)
         
         animate_progress()
@@ -1919,6 +1945,8 @@ def launch_gui(user_info):
             
             # Function to update button states with smooth transitions
             def update_theme_buttons():
+                if not btn_light.winfo_exists() or not btn_dark.winfo_exists():
+                    return
                 if is_light_mode:
                     # Light mode active
                     btn_light.config(
