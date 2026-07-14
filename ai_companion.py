@@ -12,9 +12,13 @@ from typing import Dict, List, Optional, Any, Union
 import threading
 from dataclasses import dataclass
 
-# Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()
+
+
+def _load_gemini_api_key() -> Optional[str]:
+    """Load the Gemini API key from the current environment."""
+    load_dotenv()
+    return os.getenv("GEMINI_API_KEY")
 
 # Configuration class
 @dataclass
@@ -22,7 +26,7 @@ class AIConfig:
     """Configuration for AI companion features"""
     
     # API Keys - loaded from environment variables for security
-    GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
+    GEMINI_API_KEY: Optional[str] = None
     
     # Model configuration. Use the explicit latest alias to avoid region/version 404s.
     GEMINI_MODEL: str = "gemini-1.5-flash-latest"
@@ -36,10 +40,7 @@ class AIConfig:
     RESPONSE_MAX_LENGTH: int = 300
     
     def __post_init__(self):
-        # Can also load from environment if preferred
-        env_key = os.getenv("GEMINI_API_KEY")
-        if env_key:
-            self.GEMINI_API_KEY = env_key
+        self.GEMINI_API_KEY = _load_gemini_api_key()
         self.ENABLE_GEMINI = bool(self.GEMINI_API_KEY)
 
 # Global config instance
